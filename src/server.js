@@ -224,7 +224,7 @@ app.post('/kolonia/ulepsz/:b', auth, action('/kolonia', async (t, u, now, req) =
   if (!payable(m, c)) fail(`Brakuje surowców. Koszt: ${costText(c)}`);
   await t.run(`UPDATE users SET metal = ?, crystal = ?, energy = ?, collected_at = ?, hp = ?, hp_at = ?, ${def.col} = ${def.col} + 1 WHERE id = ?`,
     [m.metal - c.metal, m.crystal - c.crystal, m.energy - c.energy, now, m.hp, now, u.id]);
-  return { msg: `${def.icon} ${def.name} ulepszona do poziomu ${lvl + 1}!`, data: { building: req.params.b, level: lvl + 1, cost: c } };
+  return { msg: `${def.name} ulepszona do poziomu ${lvl + 1}!`, data: { building: req.params.b, level: lvl + 1, cost: c } };
 }));
 
 // ---------- statek ----------
@@ -240,7 +240,7 @@ app.post('/statek/ulepsz/:m', auth, action('/statek', async (t, u, now, req) => 
   if (req.params.m === 'hull') hp += 40; // nowe płyty pancerza są w pełni sprawne
   await t.run(`UPDATE users SET metal = metal - ?, crystal = crystal - ?, energy = energy - ?, hp = ?, hp_at = ?, ${def.col} = ${def.col} + 1 WHERE id = ?`,
     [c.metal, c.crystal, c.energy, hp, now, u.id]);
-  return { msg: `${def.icon} ${def.name}: poziom ${lvl + 1}!`, data: { module: req.params.m, level: lvl + 1 } };
+  return { msg: `${def.name}: poziom ${lvl + 1}!`, data: { module: req.params.m, level: lvl + 1 } };
 }));
 
 // ---------- bitwy ----------

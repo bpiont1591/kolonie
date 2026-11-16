@@ -68,6 +68,10 @@ i bitwę PvP, zakłada korporację, dołącza drugiego gracza i sprawdza wszystk
   Źródła w wysokiej rozdzielczości: `art-src/` (+ `art-src/gen/`).
 - `python3 scripts/build-assets.py` tworzy z nich lekkie wersje WebP w `public/img/` (łącznie ok. 380 KB),
   ikony PWA/favicon (`public/icon-*.png`) i obraz do udostępniania `public/img/og.jpg` (1200×630).
+- Ikony interfejsu (v3): 11 ikon premium (kadłub, działa, tarcze, naprawa, siła, XP, PvP, korporacja, trofeum,
+  zbiórka, porażka) – źródła w `art-src/icons/`, `python3 scripts/build-icons.py` wycina czarne tło i zapisuje
+  przezroczyste WebP 160 px (`public/img/i_*.webp`, ~15 KB/szt.). Glify (zakładki, szewron ulepszenia, kłódka itd.)
+  to ręcznie rysowany sprite SVG w `src/icons.js`; plakietka poziomu to sześciokąt w CSS. Interfejs nie używa emoji.
 - Font nagłówków: Rajdhani (SIL Open Font License), podzbiór łaciński z polskimi znakami w `public/fonts/`.
 - Strona startowa ma meta tagi Open Graph/Twitter, statystyki na żywo z bazy, podgląd rankingu, FAQ
   i podpowiedź instalacji PWA.
