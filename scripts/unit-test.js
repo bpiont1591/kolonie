@@ -12,6 +12,7 @@ import * as MK from '../src/market.js';
 import * as RF from '../src/referral.js';
 import * as AD from '../src/admin.js';
 import * as PR from '../src/progression.js';
+import * as CA from '../src/campaign.js';
 let n = 0;
 const t = (name, fn) => { fn(); n++; console.log(`✅ ${name}`); };
 
@@ -189,5 +190,24 @@ t('Drzewko technologii: punkty, kolejność, reset', () => {
   assert.equal(PR.techList({ tech: 'b1,zly,p1' }).join(), 'b1,p1');
   assert.equal(PR.resetCost(7).crystal, 700); assert.equal(PR.resetCost(0).crystal, 100);
   assert.ok(R.prodMult({ ...u, tech: 'l1' }) > R.prodMult(u) || true);
+});
+t('Kampania: dane, odblokowanie, gwiazdki, nagrody, trofea', () => {
+  assert.equal(CA.CHAPTERS.length, 5);
+  for (const c of CA.CHAPTERS) { assert.equal(c.missions.length, 5); assert.ok(PR.RELICS[c.boss.relic] && c.intro.length > 40); }
+  assert.deepEqual(CA.parseId('3-5') && [CA.parseId('3-5').c, CA.parseId('3-5').boss], [3, true]);
+  assert.equal(CA.parseId('6-1'), null); assert.equal(CA.parseId('1-6'), null); assert.equal(CA.parseId('x'), null);
+  assert.deepEqual([CA.starsFor(false, 100, 100), CA.starsFor(true, 10, 100), CA.starsFor(true, 35, 100), CA.starsFor(true, 60, 100), CA.starsFor(true, 40, 100, true)], [0, 1, 2, 3, 3]);
+  const e1 = CA.enemy(1, 1), b1 = CA.enemy(1, 5), e5 = CA.enemy(5, 1);
+  assert.ok(b1.maxHp > e1.maxHp && b1.boss && e5.atk > b1.atk);
+  const f = CA.reward(2, 5, 1, true, () => 0.5), g = CA.reward(2, 5, 1, false, () => 0.5);
+  assert.ok(f.core === 1 && f.relic === 'lewiatan' && f.xp === 2 * g.xp && !g.core && !g.relic);
+  assert.equal(CA.energyCost(1, 1), 8); assert.equal(CA.energyCost(1, 5), 16);
+  let p = CA.progress({ level: 3, camp_chests: '' }, {});
+  assert.ok(p[0].unlocked && !p[1].unlocked && p[0].ms[0].open && !p[0].ms[1].open);
+  p = CA.progress({ level: 3, camp_chests: '1' }, { '1-1': { stars: 3, wins: 1 }, '1-5': { stars: 1, wins: 1 } });
+  assert.ok(p[0].ms[1].open && !p[1].unlocked && p[1].prevBoss && p[0].chest && p[0].stars === 4); // rozdział 2 wymaga też poziomu 4
+  assert.ok(CA.progress({ level: 4 }, { '1-5': { stars: 1 } })[1].unlocked);
+  const base = R.shipStats({ level: 5, s_hull: 2, s_guns: 2, s_shields: 2 }), rel = R.shipStats({ level: 5, s_hull: 2, s_guns: 2, s_shields: 2, relics: 'grax,kowal' });
+  assert.ok(rel.maxHp > base.maxHp && rel.atk > base.atk && rel.def >= base.def);
 });
 console.log(`\n🎉 Testy jednostkowe: ${n} OK`);

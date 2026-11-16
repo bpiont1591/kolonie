@@ -43,6 +43,15 @@ export const TECH = [
   N('t3', 'taktyka', 3, 'Manewry unikowe', '+4% szansy na unik', { dodge: 0.04 }),
   N('t4', 'taktyka', 4, 'Abordaż', '+15% łupów z ataków na graczy', { pvpLoot: 0.15 }),
 ];
+/** Unikalne łupy bossów kampanii – trwałe premie (sumują się z klasą i technologiami). */
+export const RELICS = {
+  grax: { id: 'grax', name: 'Złomiany pancerz Graxa', desc: '+4% HP kadłuba', m: { hp: 0.04 } },
+  lewiatan: { id: 'lewiatan', name: 'Kryształowe serce', desc: 'tarcza pochłania 3% maks. HP', m: { shield: 0.03 } },
+  roj: { id: 'roj', name: 'Feromon Roju', desc: '+10% łupów PvE i z ekspedycji', m: { pveLoot: 0.1, expLoot: 0.1 } },
+  kowal: { id: 'kowal', name: 'Rdzeń kuźni', desc: '+5% ataku i obrony', m: { atk: 0.05, def: 0.05 } },
+  otchlan: { id: 'otchlan', name: 'Oko Otchłani', desc: '+3% krytyka i uniku', m: { crit: 0.03, dodge: 0.03 } },
+};
+export const relicList = (u) => String(u?.relics || '').split(',').filter((id) => RELICS[id]);
 export const TECH_BY_ID = Object.fromEntries(TECH.map((n) => [n.id, n]));
 export const TIER_RP = { 1: 1, 2: 2, 3: 3, 4: 4 };
 export const TIER_MIN = { 1: 5, 2: 20, 3: 60, 4: 180 }; // czas badań w minutach
@@ -69,13 +78,14 @@ const ZERO = { hp: 0, atk: 0, def: 0, crit: 0, dodge: 0, shield: 0, repair: 0, p
 const cache = new Map();
 /** Łączne modyfikatory klasy i technologii (sumowane). */
 export function mods(u) {
-  const key = `${u?.ship_class || ''}|${u?.tech || ''}`;
+  const key = `${u?.ship_class || ''}|${u?.tech || ''}|${u?.relics || ''}`;
   let m = cache.get(key);
   if (m) return m;
   m = { ...ZERO };
   const add = (x) => { for (const [k, v] of Object.entries(x)) m[k] += v; };
   if (CLASSES[u?.ship_class]) add(CLASSES[u.ship_class].m);
   for (const id of techList(u)) add(TECH_BY_ID[id].m);
+  for (const id of relicList(u)) add(RELICS[id].m);
   if (cache.size > 500) cache.clear();
   cache.set(key, m);
   return m;

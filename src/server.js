@@ -27,6 +27,7 @@ import * as AD from './admin.js';
 import registerAdmin, { addFlag, flagIfLinked, activeAnnouncements, stats as adStats } from './features/admin.js';
 import registerMarket from './features/market.js';
 import registerFleet from './features/fleet.js';
+import registerCampaign from './features/campaign.js';
 import registerReferral, { checkReferral, findInviter } from './features/referral.js';
 import * as RF from './referral.js';
 
@@ -490,6 +491,7 @@ registerArena(ctx);
 registerAchievements(ctx);
 registerMarket(ctx);
 registerFleet(ctx);
+registerCampaign(ctx);
 registerReferral(ctx);
 registerAdmin(ctx);
 registerPush(ctx);

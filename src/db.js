@@ -326,6 +326,18 @@ export const MIGRATIONS = [
     'ALTER TABLE users ADD COLUMN rq_id TEXT',
     'ALTER TABLE users ADD COLUMN rq_until INTEGER NOT NULL DEFAULT 0',
   ]],
+  ['012_campaign', [
+    `CREATE TABLE IF NOT EXISTS campaign (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      mission TEXT NOT NULL,
+      stars INTEGER NOT NULL DEFAULT 0,
+      wins INTEGER NOT NULL DEFAULT 0,
+      updated_at INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (user_id, mission)
+    )`,
+    "ALTER TABLE users ADD COLUMN relics TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE users ADD COLUMN camp_chests TEXT NOT NULL DEFAULT ''",
+  ]],
 ];
 
 async function migrate(api, conv = (s) => s) {

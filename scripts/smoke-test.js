@@ -604,6 +604,59 @@ check(r.status === 200, 'Manifest PWA');
   }
 }
 
+// ---------- v6 etap 2: kampania fabularna ----------
+{
+  let ca = (await E.get('/api/kampania')).data;
+  check(ca.ok && ca.chapters.length === 5 && ca.chapters.every((c) => c.missions.length === 5 && c.missions[4].boss), 'Kampania: 5 rozdziałów × 5 misji (boss na końcu)');
+  check(ca.chapters[0].unlocked && !ca.chapters[1].unlocked && ca.chapters[0].missions[0].open && !ca.chapters[0].missions[1].open, 'Kampania: odblokowany tylko rozdział 1, misja 1');
+  r = await E.post('/kampania/walcz/1-2');
+  check(!r.data.ok && /poprzedni/.test(r.data.msg), 'Kampania: misja 2 wymaga ukończenia misji 1', r.data.msg);
+  r = await E.post('/kampania/walcz/2-1');
+  check(!r.data.ok, 'Kampania: rozdział 2 zablokowany', r.data.msg);
+  r = await E.get('/kampania/1', false);
+  check(r.data.includes('Rdzawe Rubieże') && r.data.includes('Złomiarz Grax') && r.data.includes('cb_1.webp') && r.data.includes('Skrzynia rozdziału'), 'Kampania: mapa rozdziału z fabułą, bossem i skrzynią');
+  if (DEV) await E.post('/api/dev/przewin', { minutes: 90 }); else await sleep(4200);
+  const en0 = (await E.get('/api/stan')).data.stock.energy;
+  r = await E.post('/kampania/walcz/1-1');
+  const en1 = (await E.get('/api/stan')).data.stock.energy;
+  check(r.data.ok && r.data.battleId && (r.data.won ? r.data.stars >= 1 : true), 'Kampania: walka w misji 1-1', r.data.msg);
+  check(en0 - en1 === 8, 'Kampania: misja zużywa energię', `⚡${en0}→${en1}`);
+  if (r.data.won) {
+    check(r.data.first && r.data.reward.crystal > 0 && r.data.reward.xp > 0, 'Kampania: podwójna nagroda za pierwsze przejście');
+    const bl = (await E.get(`/bitwa/${r.data.battleId}`, false)).data;
+    check(bl.includes('/kampania/walcz/1-1') && bl.includes('Mapa rozdziału'), 'Kampania: raport z gwiazdkami i powtórką');
+    ca = (await E.get('/api/kampania')).data;
+    check(ca.chapters[0].missions[0].stars === r.data.stars && ca.chapters[0].missions[1].open, 'Kampania: gwiazdki zapisane, misja 2 odblokowana', `${r.data.stars}★`);
+  }
+  r = await E.post('/kampania/skrzynia/1');
+  check(!r.data.ok && /15★/.test(r.data.msg), 'Kampania: skrzynia wymaga 15★', r.data.msg);
+  if (DEV) {
+    await E.post('/api/dev/poziom', { level: 22 }); await E.post('/api/dev/surowce');
+    for (const mod of ['hull', 'guns', 'shields']) for (let i = 0; i < 3; i++) { await E.post(`/statek/ulepsz/${mod}`); await E.post('/statek/przyspiesz'); }
+    let tries = 0;
+    for (let m = 1; m <= 5; m++) {
+      for (let k = 0; k < 6; k++) {
+        await E.post('/api/dev/przewin', { minutes: 120 });
+        const f = await E.post(`/kampania/walcz/1-${m}`); tries++;
+        if (m === 5 && f.data.won && f.data.relic) check(f.data.relic === 'grax' && f.data.reward.core === 1, 'Kampania: boss upuszcza unikalny łup i Rdzeń', f.data.msg);
+        if (f.data.stars === 3) break;
+      }
+    }
+    ca = (await E.get('/api/kampania')).data;
+    check(ca.chapters[0].done && ca.relics.includes('grax'), 'Kampania: boss pokonany, trofeum w kolekcji', `${ca.chapters[0].stars}★ w ${tries} walkach`);
+    check(ca.chapters[1].unlocked && ca.chapters[1].missions[0].open, 'Kampania: rozdział 2 odblokowany po bossie');
+    await E.post('/api/dev/przewin', { minutes: 120 });
+    const again = await E.post('/kampania/walcz/1-5');
+    check(again.data.won ? !again.data.relic && !again.data.reward.core : true, 'Kampania: trofeum tylko raz');
+    if (ca.chapters[0].stars === 15) {
+      r = await E.post('/kampania/skrzynia/1');
+      check(r.data.ok && r.data.reward.core === 1, 'Kampania: skrzynia za 15★', r.data.msg);
+      r = await E.post('/kampania/skrzynia/1');
+      check(!r.data.ok, 'Kampania: skrzynia tylko raz');
+    }
+  }
+}
+
 // ---------- v5 etap 5: panel admina, bany, ogłoszenia, ochrona przed botami ----------
 r = await M2.get('/admin', false);
 check(r.status === 404, 'Admin: panel ukryty przed zwykłym graczem');
