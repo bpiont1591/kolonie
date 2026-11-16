@@ -54,6 +54,9 @@ check(r.status === 200 && r.data.ok, `Rejestracja ${A.name}`, r.data.msg);
 r = await B.post('/rejestracja', { username: B.name, password: 'haslo456' });
 check(r.status === 200 && r.data.ok, `Rejestracja ${B.name}`, r.data.msg);
 B.id = r.data.userId;
+const E = new Client(`Lyra_${suffix}`);
+r = await E.post('/rejestracja', { username: E.name, password: 'haslo321' });
+E.id = r.data.userId;
 r = await new Client('x').post('/rejestracja', { username: A.name, password: 'cokolwiek' });
 check(r.status === 400, 'Duplikat nazwy odrzucony', r.data.msg);
 r = await new Client('x').post('/logowanie', { username: A.name, password: 'zle-haslo' });
@@ -265,10 +268,38 @@ check(r.data.ok, 'Przywódca usuwa członka', r.data.msg);
 r = await B.post(`/korporacja/dolacz/${corpId}`);
 check(r.data.ok, 'Ponowne dołączenie', r.data.msg);
 
+// ---------- v5 etap 1: samouczek ----------
+st = (await E.get('/api/stan')).data;
+check(st.tut && st.tut.n === 1 && !st.tut.done && st.tut.key === 'collect', 'Samouczek: nowy gracz zaczyna od kroku 1/5', st.tut?.title);
+r = await E.get('/kolonia', false);
+check(r.data.includes('Misja startowa') && r.data.includes('data-tut="collect"') && r.data.includes('body class="in ') && /<body[^>]*data-tut-step="collect"/.test(r.data), 'Samouczek: pasek i podświetlenie elementu');
+r = await E.post('/samouczek/odbierz');
+check(!r.data.ok, 'Samouczek: nagroda dopiero po wykonaniu kroku', r.data.msg);
+const tutSteps = [['/kolonia/zbierz', 'Zbierz'], ['/kolonia/ulepsz/mine', 'Kopalnia'], ['/bitwa/piraci/zwiadowca', 'Piraci'], ['/statek/ulepsz/guns', 'Działa'], ['/misje/logowanie', 'Nagroda dnia']];
+for (const [i, [path, label]] of tutSteps.entries()) {
+  const a = await E.post(path);
+  st = (await E.get('/api/stan')).data;
+  const before = st.stock?.metal;
+  check(a.data.ok && st.tut?.n === i + 1 && st.tut.done, `Samouczek: krok ${i + 1} wykonany (${label})`, a.data.msg);
+  r = await E.post('/samouczek/odbierz');
+  check(r.data.ok && r.data.step === i + 2 && r.data.reward?.xp > 0, `Samouczek: nagroda za krok ${i + 1}`, r.data.msg);
+  if (i === 4) check(r.data.finished && r.data.reward.core === 1, 'Samouczek: finał z Rdzeniem kwantowym');
+  if (path.includes('piraci')) await sleep(100);
+}
+st = (await E.get('/api/stan')).data;
+check(st.tut === null && st.user.tut_step === 6 && st.user.boost_until > Date.now(), 'Samouczek ukończony (pasek znika, doładowanie aktywne)');
+r = await E.post('/samouczek/odbierz');
+check(!r.data.ok, 'Samouczek: brak podwójnych nagród');
+
 // ---------- etap 4: czat ----------
 const D = new Client(`Vega_${suffix}`);
 r = await D.post('/rejestracja', { username: D.name, password: 'haslo789' });
 D.id = r.data.userId;
+r = await D.post('/samouczek/pomin');
+st = (await D.get('/api/stan')).data;
+check(r.data.ok && st.tut === null && st.user.tut_step === 0, 'Samouczek: można pominąć', r.data.msg);
+r = await D.post('/samouczek/pomin');
+check(!r.data.ok, 'Samouczek: ponowne pominięcie odrzucone');
 r = await A.postJson('/api/czat', { kanal: 'g', tekst: `Witajcie w sektorze! ${suffix}` });
 check(r.status === 200 && r.data.ok && r.data.message.id > 0, 'Czat: wysłanie wiadomości globalnej', r.data.msg);
 const firstId = r.data.message?.id || 0;
@@ -342,7 +373,7 @@ r = await new Client('anon').postJson('/api/admin/sprzataj', {});
 check(r.status === 403, 'Sprzątanie bez tokenu odrzucone');
 if (TOKEN) {
   const c = await cleanup();
-  check(c?.ok && c.users >= 3, 'Sprzątanie kont testowych', `${c?.users} kont, ${c?.corps} korporacji`);
+  check(c?.ok && c.users >= 4, 'Sprzątanie kont testowych', `${c?.users} kont, ${c?.corps} korporacji`);
   r = await A.get('/api/stan');
   check(r.status === 401, 'Konto testowe usunięte (sesja nieważna)');
 } else console.log('⚠️  Brak ADMIN_TOKEN – konta testowe zostają w bazie.');

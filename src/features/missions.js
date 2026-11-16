@@ -21,6 +21,7 @@ export default function registerMissions({ app, db, auth, page, action }) {
     const day = ls.next;
     const rw = await G.grant(t, u, now, Q.scale(Q.LOGIN_REWARDS[day - 1], u.level));
     await t.run('UPDATE users SET login_day = ?, login_streak = ? WHERE id = ?', [ls.today, day, u.id]);
+    await G.track(t, u.id, now, { login: 1 });
     return { msg: `Dzień ${day}/7: ${G.rewardText(rw)}`, data: { day, reward: rw } };
   }));
 

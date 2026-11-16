@@ -14,6 +14,8 @@ import { dur } from './time.js';
 import * as C from './corp.js';
 import registerCorp from './features/corp.js';
 import registerChat from './features/chat.js';
+import registerTutorial from './features/tutorial.js';
+import * as TUT from './tutorial.js';
 import registerPush from './features/push.js';
 import { N, fire } from './notify.js';
 import { adminTokenOk, purgeTestUsers } from './security.js';
@@ -133,7 +135,7 @@ const page = (fn) => async (req, res, next) => {
   try {
     const now = Date.now();
     let st;
-    if (req.user) { st = V.state(req.user, now); st.badges = { misje: await G.questBadge(db, req.user, now) }; }
+    if (req.user) { st = V.state(req.user, now); st.badges = { misje: await G.questBadge(db, req.user, now) }; st.tut = TUT.state(req.user, now); }
     const html = await fn(req, now, st);
     if (html === null) return res.status(404).send(V.notFound({ user: req.user, st: V.state(req.user, now) }));
     res.set('Cache-Control', 'no-store').send(html);
@@ -191,8 +193,8 @@ app.post('/rejestracja', async (req, res, next) => {
     const isTest = adminTokenOk(req.get('x-kolonie-test')) ? 1 : 0;
     const id = await db.tx(async (t) => {
       if (await t.get('SELECT id FROM users WHERE name_key = ?', [username.toLowerCase()])) fail('Ta nazwa jest już zajęta.');
-      const id = await t.insert(`INSERT INTO users (username, name_key, pass_hash, planet, created_at, metal, crystal, energy, collected_at, hp, hp_at, is_test)
-        VALUES (?, ?, ?, ?, ?, 400, 200, 150, ?, ?, ?, ?)`, [username, username.toLowerCase(), hash, planet, now, now, R.shipStats(base).maxHp, now, isTest]);
+      const id = await t.insert(`INSERT INTO users (username, name_key, pass_hash, planet, created_at, metal, crystal, energy, collected_at, hp, hp_at, is_test, tut_step)
+        VALUES (?, ?, ?, ?, ?, 400, 200, 150, ?, ?, ?, ?, 1)`, [username, username.toLowerCase(), hash, planet, now, now - R.START_PENDING_MS, R.shipStats(base).maxHp, now, isTest]);
       return id;
     });
     await startSession(res, id);
@@ -229,7 +231,7 @@ app.get('/kolonia', auth, page((req, now, st) => V.colony({ user: req.user, st, 
 app.get('/api/stan', auth, (req, res) => {
   const now = Date.now();
   const { pass_hash, _corp, ...pub } = req.user;
-  res.set('Cache-Control', 'no-store').json({ ok: true, now, user: pub, ...V.state(req.user, now) });
+  res.set('Cache-Control', 'no-store').json({ ok: true, now, user: pub, ...V.state(req.user, now), tut: TUT.state(req.user, now) });
 });
 
 app.post('/kolonia/zbierz', auth, action('/kolonia', async (t, u, now) => {
@@ -416,6 +418,7 @@ registerMissions(ctx);
 registerExpeditions(ctx);
 registerCorp(ctx);
 registerChat(ctx);
+registerTutorial(ctx);
 registerPush(ctx);
 
 // ---------- sprzątanie kont testowych (token admina w nagłówku; działa też na produkcji) ----------

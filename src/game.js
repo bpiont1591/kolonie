@@ -2,6 +2,7 @@
 import * as R from './rules.js';
 import * as Q from './quests.js';
 import { dailyPeriod, weeklyPeriod } from './time.js';
+import * as TUT from './tutorial.js';
 
 export class GameError extends Error {}
 export const fail = (msg) => { throw new GameError(msg); };
@@ -49,6 +50,8 @@ export async function track(t, userId, now, events) {
   const dp = dailyPeriod(now), wp = weeklyPeriod(now);
   for (const [ev, amt] of Object.entries(events)) {
     if (!amt || amt <= 0) continue;
+    const ts = TUT.stepForEvent(ev);
+    if (ts) await t.run('UPDATE users SET tut_done = 1 WHERE id = ? AND tut_step = ? AND tut_done = 0', [userId, ts]);
     for (const q of Q.dailyQuests(now)) if (q.ev === ev) await t.run(UPSERT, [userId, dp, q.id, Math.round(amt)]);
     for (const q of Q.WEEKLY) if (q.ev === ev) await t.run(UPSERT, [userId, wp, q.id, Math.round(amt)]);
   }

@@ -60,6 +60,7 @@ export function layout({ title, user, st, body, flash, active = '', head = '', b
   ];
   const nav = user ? `<nav class="tabs">${tabs.map(([id, href, icon, label]) =>
     `<a href="${href}" class="${active === id ? 'on' : ''}"${active === id ? ' aria-current="page"' : ''}>${ic(icon)}<span>${label}</span>${st?.badges?.[id] ? `<i class="badge">${st.badges[id] > 9 ? '9+' : st.badges[id]}</i>` : ''}</a>`).join('')}</nav>` : '';
+  const tb = user && st?.tut ? tutBar(st.tut, active) : '';
   const fl = flash ? `<div class="flash ${flash.ok ? 'ok' : 'err'}" role="status">${emo(esc(flash.msg))}</div>` : '';
   const fullTitle = title.includes('Kolonie') ? title : `${title} · Kolonie`;
   return `<!doctype html><html lang="pl"><head><meta charset="utf-8">
@@ -73,8 +74,25 @@ export function layout({ title, user, st, body, flash, active = '', head = '', b
 <link rel="stylesheet" href="/style.css?v=${V}">
 ${head}
 <title>${esc(fullTitle)}</title></head>
-<body class="${user ? 'in' : 'out'} ${bodyClass}" data-now="${Date.now()}">${SPRITE}<div class="stars"></div>${top}<main>${fl}${body}</main>${nav}
+<body class="${user ? 'in' : 'out'} ${bodyClass}" data-now="${Date.now()}"${st?.tut && !st.tut.done && st.tut.tab === active ? ` data-tut-step="${st.tut.key}"` : ''}>${SPRITE}<div class="stars"></div>${top}<main>${fl}${tb}${body}</main>${nav}
 <script src="/app.js?v=${V}" defer></script></body></html>`;
+}
+
+/** Pasek samouczka (misja startowa) – widoczny na każdej stronie do ukończenia lub pominięcia. */
+function tutBar(t, active) {
+  const dots = Array.from({ length: t.count }, (_, i) => `<i class="${i + 1 < t.n ? 'on' : i + 1 === t.n ? 'cur' : ''}"></i>`).join('');
+  const here = t.tab === active;
+  const act = t.done
+    ? `<form method="post" action="/samouczek/odbierz"><button class="btn cta wide">${ic('gift')} Odbierz nagrodę</button></form>`
+    : here ? `<p class="tut-here">${ic('up', 'bounce')} Wskazany element świeci się na tej stronie</p>`
+    : `<a class="btn primary wide" href="${t.page}">Pokaż mi ${ic('up', 'chev-r')}</a>`;
+  return `<section class="card tut${t.done ? ' done' : ''}" id="tut" aria-label="Samouczek">
+    <div class="tut-top">${pi('tutorial', 58, 'float')}<div class="grow"><small class="tut-k">Misja startowa · krok ${t.n}/${t.count}</small><b>${t.done ? `${ic('check')} ${t.title} – gotowe!` : t.title}</b><div class="tut-dots">${dots}</div></div></div>
+    <p class="tut-text">${t.done ? 'Świetnie, komandorze! Odbierz nagrodę i przejdź dalej.' : t.text}</p>
+    <div class="tut-rw">${rewardChips(t.r, 16)}</div>
+    ${act}
+    <form method="post" action="/samouczek/pomin" class="tut-skip" onsubmit="return confirm('Pominąć samouczek? Pozostałe nagrody przepadną.')"><button class="linkish">Pomiń samouczek</button></form>
+  </section>`;
 }
 
 const FEATURES = [
@@ -187,14 +205,15 @@ export function landing({ online, players, battles24, top, flash, baseUrl }) {
 }
 
 /** Karta ulepszenia: ikona + plakietka poziomu, efekt (teraz → dalej), postęp do maks., koszt, przycisk z szewronem. */
-function upgradeCard({ action, icon, name, desc, lvl, max, effect, next, cost, have, block, secs, building, busy, rushAction, now }) {
+function upgradeCard({ action, icon, name, desc, lvl, max, effect, next, cost, have, block, secs, building, busy, rushAction, now, tut = '' }) {
+  const td = tut ? ` data-tut="${tut}"` : '';
   const afford = canPay(have, cost);
   const ok = !block && !busy && !building && afford;
   const pct = Math.min(100, Math.round((lvl / max) * 100));
   if (building) {
     const left = Math.max(0, building.until - now), rc = R.rushCost(left);
     const bp = Math.min(100, Math.max(2, Math.round((1 - left / (building.total * 1000)) * 100)));
-    return `<div class="upg building">
+    return `<div class="upg building"${td}>
     <div class="upg-ic">${icon}${lvBadge(lvl, 'corner')}</div>
     <div class="upg-body">
       <div class="upg-name">${name} <span class="arrow">→</span> <span class="nx">poz. ${lvl + 1}</span></div>
@@ -208,7 +227,7 @@ function upgradeCard({ action, icon, name, desc, lvl, max, effect, next, cost, h
   const btn = block ? `<button class="btn-up is-max" disabled title="${esc(block.why)}">${ic('lock')}<span>${block.label}</span></button>`
     : busy ? `<button class="btn-up is-off" disabled title="Kolejka zajęta: ${esc(busy)}">${ic('clock')}<span>Zajęte</span></button>`
     : `<button class="btn-up${ok ? '' : ' is-off'}" ${ok ? '' : 'disabled'} title="${ok ? `Ulepsz do poziomu ${lvl + 1}` : 'Za mało surowców'}">${ic('up')}<span>${ok ? 'Ulepsz' : 'Brak'}</span></button>`;
-  return `<div class="upg${ok ? ' ready' : ''}">
+  return `<div class="upg${ok ? ' ready' : ''}"${td}>
     <div class="upg-ic">${icon}${lvBadge(lvl, 'corner')}</div>
     <div class="upg-body">
       <div class="upg-name">${name}</div>
@@ -320,7 +339,7 @@ export function colony({ user, st, flash, now = Date.now() }) {
     }[id];
     return upgradeCard({ action: `/kolonia/ulepsz/${id}`, icon: img('b_' + id, b.name, 'thumb', 64), name: b.name, desc: b.desc,
       lvl, max, effect: effect(lvl), next: lvl < max ? effect(lvl + 1) : '', cost: R.upgradeCost(b, lvl), have,
-      block: lvl >= max ? { label: 'MAX', why: 'Osiągnięto maksymalny poziom' } : null, now, secs: R.buildTime(lvl), rushAction: '/kolonia/przyspiesz',
+      block: lvl >= max ? { label: 'MAX', why: 'Osiągnięto maksymalny poziom' } : null, now, secs: R.buildTime(lvl), rushAction: '/kolonia/przyspiesz', tut: id === 'mine' ? 'build' : '',
       building: user.bq_id === id ? { until: user.bq_until, total: R.buildTime(lvl) } : null, busy: user.bq_id && user.bq_id !== id ? R.BUILDINGS[user.bq_id]?.name : null });
   }).join('');
   return layout({ title: 'Kolonia', user, st, flash, active: 'kolonia', body: `
@@ -335,7 +354,7 @@ export function colony({ user, st, flash, now = Date.now() }) {
   <section class="card">
     <div class="row"><h3>Magazyn wydobycia</h3><span class="muted small">pojemność: 2 h produkcji</span></div>
     <div class="pends">${pend}</div>
-    <form method="post" action="/kolonia/zbierz"><button class="btn primary wide collect">${pi('collect', 34, 'btn-pi')} Zbierz surowce</button></form>
+    <form method="post" action="/kolonia/zbierz"><button class="btn primary wide collect" data-tut="collect">${pi('collect', 34, 'btn-pi')} Zbierz surowce</button></form>
   </section>
   <section class="card"><h3 class="with-ic">${ic('colony', 'acc')} Budynki</h3><p class="muted small">Jedna budowa naraz. Rozpoczęcie budowy zbiera surowce z magazynu wydobycia.</p>${blds}</section>
   <section class="card push-card" id="push-card">
@@ -358,7 +377,7 @@ export function ship({ user, st, flash, now = Date.now() }) {
     const capped = lvl >= cap;
     return upgradeCard({ action: `/statek/ulepsz/${id}`, icon: `<span class="mod-ic">${pi(id, 64, '', m.name)}</span>`, name: m.name, desc: m.desc,
       lvl, max: cap, effect: modEff[id](0), next: capped ? '' : modEff[id](1), cost: R.upgradeCost(m, lvl), have: st.stock,
-      block: capped && user.mq_id !== id ? { label: 'Limit', why: 'Ulepsz stocznię, by podnieść limit' } : null, now, secs: R.moduleTime(lvl), rushAction: '/statek/przyspiesz',
+      block: capped && user.mq_id !== id ? { label: 'Limit', why: 'Ulepsz stocznię, by podnieść limit' } : null, now, secs: R.moduleTime(lvl), rushAction: '/statek/przyspiesz', tut: id === 'guns' ? 'module' : '',
       building: user.mq_id === id ? { until: user.mq_until, total: R.moduleTime(lvl) } : null, busy: user.mq_id && user.mq_id !== id ? R.MODULES[user.mq_id]?.name : null });
   }).join('');
   return layout({ title: 'Statek', user, st, flash, active: 'statek', body: `
@@ -388,7 +407,7 @@ export function battle({ user, st, flash, targets, recent, now }) {
       <div class="grow"><div class="row"><b>${p.name}</b>${locked ? `<span class="lock-tag">${ic('lock')} od poz. ${p.minLvl}</span>` : lvBadge(e.level, 'red')}</div>
         <div class="muted small">${p.desc}</div>
         ${locked ? '' : `<div class="eff stats-inl"><span>${ic('heart', 'hp-ic')}${e.hp}</span><span>${pi('guns', 18, 'inl')}${e.atk}</span><span>${pi('shields', 18, 'inl')}${e.def}</span></div>`}</div>
-      <form method="post" action="/bitwa/piraci/${p.id}"><button class="btn sm ${locked ? '' : 'danger'}" ${locked ? 'disabled' : ''}>${locked ? ic('lock') : ic('battle')}<span class="en">${resIcon('energy', 16)}${p.energy}</span></button></form>
+      <form method="post" action="/bitwa/piraci/${p.id}"><button class="btn sm ${locked ? '' : 'danger'}"${p.id === 'zwiadowca' ? ' data-tut="pve"' : ''} ${locked ? 'disabled' : ''}>${locked ? ic('lock') : ic('battle')}<span class="en">${resIcon('energy', 16)}${p.energy}</span></button></form>
     </div>`;
   }).join('');
   const tg = targets.length ? targets.map((t) => `<div class="item">
@@ -468,7 +487,7 @@ export function missions({ user, st, flash, qs, resetIn, weekIn, now }) {
   const nextR = Q.scale(Q.LOGIN_REWARDS[ls.next - 1], user.level);
   const claim = ls.claimedToday
     ? `<button class="btn wide" disabled>${ic('check')} Odebrano – kolejna nagroda za <span data-countdown="${now + resetIn}">${dur(resetIn)}</span></button>`
-    : `<form method="post" action="/misje/logowanie"><button class="btn cta wide">${ic('gift')} Odbierz dzień ${ls.next}</button></form>
+    : `<form method="post" action="/misje/logowanie"><button class="btn cta wide" data-tut="daily">${ic('gift')} Odbierz dzień ${ls.next}</button></form>
        <div class="center small muted" style="margin-top:6px">W nagrodzie: ${rewardChips(nextR, 16)}</div>`;
   const qRow = (q) => {
     const pct = Math.round((q.progress / q.goal) * 100);

@@ -57,6 +57,21 @@
   if (ib) ib.addEventListener('click', async () => { if (!deferred) return; deferred.prompt(); await deferred.userChoice; deferred = null; ib.hidden = true; });
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 
+  // Samouczek: podświetlenie wskazanego elementu (body[data-tut-step] = klucz kroku).
+  const tk = document.body.dataset.tutStep;
+  const target = tk && document.querySelector(`[data-tut="${tk}"]`);
+  if (target) {
+    target.classList.add('tut-hi');
+    const ptr = document.createElement('span');
+    ptr.className = 'tut-ptr'; ptr.textContent = 'Tutaj!';
+    (target.closest('.upg') || target.parentElement).classList.add('tut-anchor');
+    (target.closest('.upg') || target.parentElement).append(ptr);
+    setTimeout(() => {
+      const r = target.getBoundingClientRect();
+      if (r.top < 70 || r.bottom > innerHeight - 90) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 700);
+  }
+
   // Web Push: przycisk zgody na powiadomienia (karta na stronie kolonii).
   const pc = document.getElementById('push-card');
   if (pc) {

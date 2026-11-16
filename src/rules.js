@@ -1,6 +1,7 @@
 // Czyste reguły gry (bez bazy danych i HTTP) – łatwe do testowania i balansowania.
 export const SPEED = Math.max(0.1, Number(process.env.GAME_SPEED) || 1); // mnożnik tempa (tylko do testów)
 export const MIN = 60_000;
+export const START_PENDING_MS = 15 * 60_000; // nowe konto ma od razu 15 min wydobycia do zebrania (krok 1 samouczka)
 export const STORAGE_MINUTES = 120;       // magazyn wydobycia mieści 2 h produkcji
 export const BATTLE_COOLDOWN_MS = 4_000;  // anty-spam między bitwami
 export const PVP_SHIELD_MS = 15 * MIN;    // ochrona po byciu zaatakowanym

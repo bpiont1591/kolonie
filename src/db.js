@@ -181,6 +181,10 @@ export const MIGRATIONS = [
   ['005_test_flag', [
     'ALTER TABLE users ADD COLUMN is_test INTEGER NOT NULL DEFAULT 0',
   ]],
+  ['006_tutorial', [
+    'ALTER TABLE users ADD COLUMN tut_step INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE users ADD COLUMN tut_done INTEGER NOT NULL DEFAULT 0',
+  ]],
 ];
 
 async function migrate(api, conv = (s) => s) {

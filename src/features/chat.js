@@ -36,7 +36,7 @@ export default function registerChat({ app, db, auth, page, wantsJson, respond }
       </form>
       <small class="muted chat-rules"><span data-count>0/${MAX_LEN}</span> · maks. ${MAX_LEN} znaków, bez spamu i wulgaryzmów</small>
     </section>`;
-    return layout({ title: 'Czat', user: u, st, flash: req.flash, active: 'czat', body, head: '<script src="/chat.js?v=9" defer></script>' });
+    return layout({ title: 'Czat', user: u, st, flash: req.flash, active: 'czat', body, head: '<script src="/chat.js?v=10" defer></script>' });
   }));
 
   app.get('/api/czat', auth, async (req, res, next) => {
