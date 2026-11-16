@@ -1,12 +1,15 @@
 import * as R from './rules.js';
 import { SPRITE, ic, pi, lvBadge, V as ASSET_V } from './icons.js';
 import * as Q from './quests.js';
-import { dur } from './time.js';
+import { dur, clockHM } from './time.js';
+import { titleOf } from './achievements.js';
 export { ic, pi, lvBadge };
 
 /** Polska odmiana: plural(2, 'nagroda', 'nagrody', 'nagród') -> 'nagrody'. */
 export const plural = (n, one, few, many) => (n === 1 ? one : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? few : many);
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+/** Tytuł przy nicku (z osiągnięć). */
+export const ttl = (id) => { const t = titleOf(id); return t ? ` <span class="ttl">${esc(t)}</span>` : ''; };
 export const fmt = (n) => Math.floor(n).toLocaleString('pl-PL');
 export const ago = (ts, now) => {
   const s = Math.max(0, Math.round((now - ts) / 1000));
@@ -54,7 +57,7 @@ export function layout({ title, user, st, body, flash, active = '', head = '', b
       ${R.RES_KEYS.map((k) => `<span>${resIcon(k)}<b>${fmt(st.stock[k])}</b></span>`).join('')}
     </div>
     <a class="rank-link${active === 'ranking' ? ' on' : ''}" href="/ranking" aria-label="Ranking" title="Ranking">${pi('trophy', 30)}</a>
-    <div class="who">${lvBadge(user.level, 'sm')}<span>${esc(user.username)}</span></div>
+    <a class="who" href="/osiagniecia" title="Osiągnięcia i tytuły">${lvBadge(user.level, 'sm')}<span>${esc(user.username)}${titleOf(user.title) ? `<small class="who-t">${esc(titleOf(user.title))}</small>` : ''}</span></a>
   </header>` : '';
   const tabs = [
     ['kolonia', '/kolonia', 'colony', 'Kolonia'], ['statek', '/statek', 'ship', 'Statek'], ['bitwa', '/bitwa', 'battle', 'Bitwa'],
@@ -398,7 +401,7 @@ export function ship({ user, st, flash, now = Date.now() }) {
   <section class="card"><h3 class="with-ic">${ic('ship', 'acc')} Moduły</h3><p class="muted small">Limit poziomu modułów: ${cap} (2 × poziom stoczni). Za surowce z magazynu głównego.</p>${mods}</section>` });
 }
 
-export function battle({ user, st, flash, targets, recent, now }) {
+export function battle({ user, st, flash, targets, recent, now, arena }) {
   const enough = st.ship.hp >= st.ship.maxHp * R.MIN_HP_RATIO;
   const away = user.ex_until > now;
   const pir = R.PIRATES.map((p) => {
@@ -429,6 +432,7 @@ export function battle({ user, st, flash, targets, recent, now }) {
   <section class="card banner battle-banner" style="--bg:url('/img/battle_bg.webp?v=${V}')"><h2>Centrum dowodzenia</h2>${hpBar(st)}
     ${away ? `<p class="warn small with-ic">${pi('expedition', 26)} Statek jest na ekspedycji – wróci za <b data-countdown="${user.ex_until}" data-reload>${dur(user.ex_until - now)}</b>. Bitwy niedostępne.</p>` : ''}
     ${enough ? '' : `<p class="warn small">Statek jest zbyt uszkodzony (min. ${R.MIN_HP_RATIO * 100}% HP). Poczekaj na naprawę.</p>`}</section>
+  ${arena ? `<a class="callout arena-cta" href="/arena">${pi('arena', 56)}<span class="grow"><b>Arena – turniej o ${clockHM(arena.next)}</b><br><small class="muted">${arena.joined ? 'Jesteś zapisany ✓' : 'Zapisy otwarte'} · ${arena.n} ${plural(arena.n, 'gracz', 'graczy', 'graczy')} · start za <b data-countdown="${arena.next}">${dur(arena.next - now)}</b></small></span>${ic('up', 'chev-r')}</a>` : ''}
   <section class="card"><h3 class="with-ic">${pi('defeat', 30)} Piraci</h3>${pir}</section>
   <section class="card"><h3 class="with-ic">${pi('pvp', 30)} Inni gracze</h3><p class="muted small">Wygrana = łup 10% metalu i kryształów rywala. Zaatakowany gracz dostaje 15 min ochrony.</p>${tg}</section>
   <section class="card"><h3 class="with-ic">${ic('log', 'acc')} Ostatnie bitwy</h3>${rec}</section>` });
@@ -463,7 +467,7 @@ export function ranking({ user, st, flash, tab, rows, myRank }) {
       <br><small class="muted">${c.members} członków</small></span><b class="pts">${pi('power', 20, 'inl')}${fmt(c.power)}</b></div>`).join('');
   } else {
     body = rows.map((r, i) => `<div class="item rank ${r.id === user.id ? 'me' : ''}"><span class="pos">${i + 1}</span>
-      <span class="grow"><b>${esc(r.username)}</b> ${r.tag ? `<span class="corp">[${esc(r.tag)}]</span>` : ''}<br>
+      <span class="grow"><b>${esc(r.username)}</b>${ttl(r.title)} ${r.tag ? `<span class="corp">[${esc(r.tag)}]</span>` : ''}<br>
       <small class="muted">${tab === 'pvp' ? `${r.pvp_wins} W / ${r.pvp_losses} P` : `${fmt(r.xp)} XP · ${r.pve_wins} piratów`}</small></span>
       ${tab === 'pvp' ? `<b class="pts">${pi('pvp', 20, 'inl')}${r.pvp_points}</b>` : lvBadge(r.level)}</div>`).join('');
   }

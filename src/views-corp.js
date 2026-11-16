@@ -1,7 +1,7 @@
 // Widoki korporacji (etap 3): przegląd, skarbiec, ulepszenia, wojna o sektor, boss rajdowy.
 import * as R from './rules.js';
 import * as C from './corp.js';
-import { layout, esc, emo, fmt, resIcon, costHtml, rewardChips, ago, hpBar, img } from './views.js';
+import { layout, esc, emo, fmt, resIcon, costHtml, rewardChips, ago, hpBar, img, ttl } from './views.js';
 import { ic, pi, lvBadge, V } from './icons.js';
 import { dur, msToWeekEnd } from './time.js';
 
@@ -57,7 +57,7 @@ export function corpHome({ user, st, flash, c, members, log, now }) {
         acts.push(`<form method="post" action="/korporacja/wyrzuc/${m.id}" onsubmit="return confirm('Usunąć gracza ${esc(m.username)} z korporacji?')"><button class="icon-btn red" title="Usuń z korporacji">${ic('logout')}</button></form>`);
     }
     return `<div class="item member${m.id === user.id ? ' me' : ''}"><span class="avatar ${m.corp_role}">${ic(roleIc[m.corp_role] || 'user')}</span>
-      <span class="grow"><b>${esc(m.username)}</b> ${roleBadge(m.corp_role)}<br><small class="muted">poz. ${m.level} · siła ${R.power(m)} · ${pi('pvp', 14, 'inl')}${m.pvp_points}</small></span>
+      <span class="grow"><b>${esc(m.username)}</b>${ttl(m.title)} ${roleBadge(m.corp_role)}<br><small class="muted">poz. ${m.level} · siła ${R.power(m)} · ${pi('pvp', 14, 'inl')}${m.pvp_points}</small></span>
       <span class="acts">${acts.join('')}</span></div>`;
   }).join('');
   return layout({ title: c.name, user, st, flash, active: 'korporacja', body: `

@@ -221,6 +221,37 @@ export const MIGRATIONS = [
       PRIMARY KEY (user_id, badge, season)
     )`,
   ]],
+  ['008_arena_achievements', [
+    `CREATE TABLE IF NOT EXISTS arena_entries (
+      t_start INTEGER NOT NULL,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      joined_at INTEGER NOT NULL,
+      PRIMARY KEY (t_start, user_id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS arena_tournaments (
+      start INTEGER PRIMARY KEY,
+      status TEXT NOT NULL,
+      players INTEGER NOT NULL DEFAULT 0,
+      bracket TEXT NOT NULL DEFAULT '{}',
+      resolved_at INTEGER NOT NULL
+    )`,
+    `CREATE TABLE IF NOT EXISTS arena_results (
+      start INTEGER NOT NULL,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      place INTEGER NOT NULL,
+      reward TEXT NOT NULL,
+      PRIMARY KEY (start, user_id)
+    )`,
+    'CREATE INDEX IF NOT EXISTS arena_results_user ON arena_results(user_id, start DESC)',
+    `CREATE TABLE IF NOT EXISTS user_achievements (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      ach TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (user_id, ach)
+    )`,
+    "ALTER TABLE users ADD COLUMN title TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE chat_messages ADD COLUMN title TEXT NOT NULL DEFAULT ''",
+  ]],
 ];
 
 async function migrate(api, conv = (s) => s) {

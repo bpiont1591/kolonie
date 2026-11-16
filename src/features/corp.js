@@ -8,7 +8,7 @@ import { weekStart, dur } from '../time.js';
 import * as VC from '../views-corp.js';
 
 export default function registerCorp({ app, db, auth, page, action, payable, costText, preBattle, settledHooks, devHooks }) {
-  const members = (q, corpId) => q.all('SELECT id, username, level, xp, pvp_points, corp_role, s_hull, s_guns, s_shields FROM users WHERE corp_id = ? ORDER BY CASE corp_role WHEN \'leader\' THEN 0 WHEN \'officer\' THEN 1 ELSE 2 END, level DESC, xp DESC', [corpId]);
+  const members = (q, corpId) => q.all('SELECT id, username, title, level, xp, pvp_points, corp_role, s_hull, s_guns, s_shields FROM users WHERE corp_id = ? ORDER BY CASE corp_role WHEN \'leader\' THEN 0 WHEN \'officer\' THEN 1 ELSE 2 END, level DESC, xp DESC', [corpId]);
   const need = (u) => u.corp_id || fail('Nie należysz do żadnej korporacji.');
   const needRole = (u) => C.canManage(u.corp_role) || fail('Tylko przywódca lub oficer może to zrobić.');
 

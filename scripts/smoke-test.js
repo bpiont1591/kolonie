@@ -329,6 +329,65 @@ if (DEV) {
   check(r.data.includes(E.name) && r.data.includes(fake), 'Sezon: archiwum zwycięzców');
 }
 
+// ---------- v5 etap 3: osiągnięcia, tytuły, arena ----------
+let ach = (await E.get('/api/osiagniecia')).data;
+check(ach.ok && ach.count >= 15 && ach.unlocked.includes('kadet') && ach.unlocked.includes('pierwsza_krew'), 'Osiągnięcia: odblokowane automatycznie (Kadet, Pierwsza krew)', ach.unlocked?.join(', '));
+r = await E.post('/osiagniecia/tytul/legenda');
+check(!r.data.ok, 'Tytuł: nie można ustawić niezdobytego', r.data.msg);
+r = await E.post('/osiagniecia/tytul/kadet');
+check(r.data.ok && r.data.titleText === 'Kadet', 'Tytuł: ustawienie „Kadet”', r.data.msg);
+r = await E.get('/osiagniecia', false);
+check(r.status === 200 && r.data.includes('who-t') && r.data.includes('Osiągnięcia') && r.data.includes('tchip on'), 'Osiągnięcia: strona z tytułem przy nicku');
+r = await A.get('/api/ranking?tab=gracze');
+check(r.data.rows.find((x) => x.id === E.id)?.title === 'kadet', 'Tytuł widoczny w rankingu');
+r = await E.get('/ranking', false);
+check(r.data.includes('class="ttl">Kadet'), 'Tytuł przy nicku w rankingu (HTML)');
+
+let ar = (await E.get('/api/arena')).data;
+check(ar.ok && ar.next > Date.now() && ar.next - Date.now() <= 4 * 3600_000 && !ar.joined, 'Arena: najbliższy turniej w ciągu 4 h', new Date(ar.next).toISOString());
+let lv = (await E.get('/api/stan')).data;
+const enBefore = lv.stock.energy;
+r = await E.post('/arena/zapisz');
+check(r.data.ok && r.data.start === ar.next, 'Arena: zapis na turniej', r.data.msg);
+lv = (await E.get('/api/stan')).data;
+check(Math.round(enBefore - lv.stock.energy) === 10 || lv.stock.energy < enBefore, 'Arena: opłata ⚡10', `${Math.floor(enBefore)} → ${Math.floor(lv.stock.energy)}`);
+r = await E.post('/arena/zapisz');
+check(!r.data.ok, 'Arena: brak podwójnego zapisu', r.data.msg);
+r = await E.post('/arena/wypisz');
+check(r.data.ok, 'Arena: wypisanie ze zwrotem energii', r.data.msg);
+r = await E.post('/arena/zapisz');
+check(r.data.ok, 'Arena: ponowny zapis');
+r = await E.get('/arena', false);
+check(r.status === 200 && r.data.includes(E.name) && r.data.includes('Wypisz się') && r.data.includes('Nagrody'), 'Arena: strona z listą zapisanych');
+r = await E.get('/bitwa', false);
+check(r.data.includes('Arena – turniej o') && r.data.includes('Jesteś zapisany'), 'Arena: zaproszenie na stronie Bitwa');
+if (DEV) {
+  r = await E.postJson('/api/dev/arena-teraz', {});
+  check(r.data.ok && r.data.status === 'cancelled' && r.data.players === 1, 'Arena: turniej odwołany przy 1 graczu (zwrot energii)');
+  const lvl = {};
+  for (const c of [A, B, E]) { await c.post('/api/dev/surowce'); lvl[c.name] = (await c.get('/api/stan')).data.user.level; }
+  for (const c of [A, B, E]) {
+    r = await c.post('/arena/zapisz');
+    check(lvl[c.name] >= 2 ? r.data.ok : !r.data.ok, `Arena: zapis ${c.name} (poz. ${lvl[c.name]})`, r.data.msg);
+  }
+  const joined = [A, B, E].filter((c) => lvl[c.name] >= 2);
+  r = await E.postJson('/api/dev/arena-teraz', {});
+  const places = Object.values(r.data.places || {}).sort((a, b) => a - b);
+  check(r.data.ok && r.data.status === 'done' && r.data.players === joined.length && places[0] === 1 && places[1] === 2, 'Arena: turniej rozegrany (drabinka, miejsca)', JSON.stringify(r.data.places));
+  const start = r.data.start;
+  ar = (await E.get('/api/arena')).data;
+  check(ar.results[0]?.start === start && ar.results[0].place >= 1, 'Arena: wynik w historii gracza', `miejsce ${ar.results[0]?.place}`);
+  r = await E.get(`/arena/turniej/${start}`, false);
+  check(r.status === 200 && r.data.includes('Finał') && r.data.includes('Mistrz') && r.data.includes(E.name), 'Arena: strona turnieju z drabinką');
+  r = await E.get('/arena', false);
+  check(r.data.includes('Ostatni turniej') && r.data.includes('bk-col'), 'Arena: ostatnia drabinka na stronie areny');
+} else {
+  r = await E.post('/arena/wypisz');
+  check(r.data.ok, 'Arena: wypisanie konta testowego przed sprzątaniem');
+}
+r = await E.post('/osiagniecia/tytul/brak');
+check(r.data.ok && r.data.title === '', 'Tytuł: zdjęcie tytułu');
+
 // ---------- etap 4: czat ----------
 const D = new Client(`Vega_${suffix}`);
 r = await D.post('/rejestracja', { username: D.name, password: 'haslo789' });

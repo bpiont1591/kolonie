@@ -18,6 +18,8 @@ import registerTutorial from './features/tutorial.js';
 import registerSeason, { passBadge, ensureFinalized, finalizeSeason } from './features/season.js';
 import * as TUT from './tutorial.js';
 import registerPush from './features/push.js';
+import registerArena, { ensureArena, arenaSummary } from './features/arena.js';
+import registerAchievements, { checkAchievements, achText } from './features/achievements.js';
 import { N, fire } from './notify.js';
 import { adminTokenOk, purgeTestUsers } from './security.js';
 
@@ -149,7 +151,10 @@ const action = (redirect, fn) => async (req, res, next) => {
       const now = Date.now();
       const sres = await G.settle(t, await G.augment(t, await t.get('SELECT * FROM users WHERE id = ?', [req.user.id]), now), now);
       if (sres.done.length) onSettled(sres.u, sres.done);
-      return fn(t, sres.u, now, req);
+      const r = await fn(t, sres.u, now, req);
+      const ach = await checkAchievements(t, req.user.id, now);
+      if (ach.length) return { ...r, msg: [r.msg, achText(ach)].filter(Boolean).join(' · '), data: { ...(r.data || {}), achievements: ach.map((a) => a.id) } };
+      return r;
     });
     respond(req, res, { ok: true, msg: out.msg, redirect: out.redirect || redirect, data: out.data });
   } catch (e) {
@@ -185,13 +190,13 @@ app.post('/rejestracja', async (req, res, next) => {
     const password = String(req.body.password || '');
     if (!NAME_RE.test(username)) return respond(req, res, { ok: false, msg: 'Nazwa: 3–16 znaków (litery, cyfry, _ lub -).', redirect: '/' });
     if (password.length < 6 || password.length > 200) return respond(req, res, { ok: false, msg: 'Hasło musi mieć co najmniej 6 znaków.', redirect: '/' });
-    if (rateLimited('reg:' + req.ip)) return respond(req, res, { ok: false, msg: 'Za dużo prób. Spróbuj później.', redirect: '/' });
+    // konta zakładane przez testy automatyczne (nagłówek z tokenem admina) są oznaczane i sprzątane po teście
+    const isTest = adminTokenOk(req.get('x-kolonie-test')) ? 1 : 0;
+    if (!isTest && rateLimited('reg:' + req.ip)) return respond(req, res, { ok: false, msg: 'Za dużo prób. Spróbuj później.', redirect: '/' });
     const hash = await hashPassword(password);
     const now = Date.now();
     const planet = R.PLANETS[crypto.randomInt(R.PLANETS.length)];
     const base = { s_hull: 1, s_guns: 1, s_shields: 1, level: 1 };
-    // konta zakładane przez testy automatyczne (nagłówek z tokenem admina) są oznaczane i sprzątane po teście
-    const isTest = adminTokenOk(req.get('x-kolonie-test')) ? 1 : 0;
     const id = await db.tx(async (t) => {
       if (await t.get('SELECT id FROM users WHERE name_key = ?', [username.toLowerCase()])) fail('Ta nazwa jest już zajęta.');
       const id = await t.insert(`INSERT INTO users (username, name_key, pass_hash, planet, created_at, metal, crystal, energy, collected_at, hp, hp_at, is_test, tut_step)
@@ -301,11 +306,13 @@ async function battleTargets(u, now) {
 
 app.get('/bitwa', auth, page(async (req, now, st) => {
   const u = req.user;
+  await ensureArena(db, now);
+  const arena = await arenaSummary(db, u.id, now);
   const recent = await db.all(`SELECT b.id, b.kind, b.attacker_id, b.attacker_won, b.enemy_name, b.created_at,
       a.username AS attacker_name, d.username AS defender_name
     FROM battles b JOIN users a ON a.id = b.attacker_id LEFT JOIN users d ON d.id = b.defender_id
     WHERE b.attacker_id = ? OR b.defender_id = ? ORDER BY b.id DESC LIMIT 10`, [u.id, u.id]);
-  return V.battle({ user: u, st, flash: req.flash, targets: await battleTargets(u, now), recent, now });
+  return V.battle({ user: u, st, flash: req.flash, targets: await battleTargets(u, now), recent, now, arena });
 }));
 
 app.get('/bitwa/:id', auth, page(async (req, now, st) => {
@@ -393,7 +400,7 @@ async function rankingData(tab, userId) {
       FROM corps c JOIN users u ON u.corp_id = c.id GROUP BY c.id ORDER BY power DESC LIMIT 50`) };
   }
   const order = tab === 'pvp' ? 'u.pvp_points DESC, u.pvp_wins DESC, u.id ASC' : 'u.level DESC, u.xp DESC, u.id ASC';
-  const rows = await db.all(`SELECT u.id, u.username, u.level, u.xp, u.pve_wins, u.pvp_wins, u.pvp_losses, u.pvp_points, c.tag
+  const rows = await db.all(`SELECT u.id, u.username, u.title, u.level, u.xp, u.pve_wins, u.pvp_wins, u.pvp_losses, u.pvp_points, c.tag
     FROM users u LEFT JOIN corps c ON c.id = u.corp_id ORDER BY ${order} LIMIT 50`);
   const me = await db.get('SELECT level, xp, pvp_points, pvp_wins, id FROM users WHERE id = ?', [userId]);
   const higher = tab === 'pvp'
@@ -414,13 +421,16 @@ app.get('/api/ranking', auth, async (req, res, next) => {
 });
 
 // ---------- moduły funkcji ----------
-const ctx = { xpGain, preBattle, settledHooks, devHooks, app, db, auth, page, action, respond, wantsJson, materialize, payable, costText };
+const DEV = process.env.DEV_HOOKS === '1' && !process.env.RENDER;
+const ctx = { dev: DEV, xpGain, preBattle, settledHooks, devHooks, app, db, auth, page, action, respond, wantsJson, materialize, payable, costText };
 registerMissions(ctx);
 registerExpeditions(ctx);
 registerCorp(ctx);
 registerChat(ctx);
 registerTutorial(ctx);
 registerSeason(ctx);
+registerArena(ctx);
+registerAchievements(ctx);
 registerPush(ctx);
 
 // ---------- sprzątanie kont testowych (token admina w nagłówku; działa też na produkcji) ----------

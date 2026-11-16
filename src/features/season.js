@@ -59,7 +59,7 @@ export async function passBadge(db, u, now) {
   return Math.max(0, lv - Number(c)) + Number(unclaimedAwards);
 }
 async function ranking(db, season, userId, limit = 50) {
-  const rows = await db.all(`SELECT s.user_id AS id, s.xp, u.username, u.level, c.tag FROM season_stats s JOIN users u ON u.id = s.user_id
+  const rows = await db.all(`SELECT s.user_id AS id, s.xp, u.username, u.title, u.level, c.tag FROM season_stats s JOIN users u ON u.id = s.user_id
     LEFT JOIN corps c ON c.id = u.corp_id WHERE s.season = ? AND s.xp > 0 ORDER BY s.xp DESC, s.user_id ASC LIMIT ?`, [season, limit]);
   const me = await db.get('SELECT xp FROM season_stats WHERE season = ? AND user_id = ?', [season, userId]);
   const myRank = me?.xp > 0 ? Number((await db.get('SELECT COUNT(*) AS n FROM season_stats WHERE season = ? AND (xp > ? OR (xp = ? AND user_id < ?))', [season, me.xp, me.xp, userId])).n) + 1 : null;

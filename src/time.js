@@ -46,3 +46,15 @@ export function seasonName(id) {
   const m = /^(\d{4})-(\d{2})$/.exec(id);
   return m ? `${MONTHS[Number(m[2]) - 1]} ${m[1]}` : id;
 }
+
+// ---------- arena (turnieje co ARENA_EVERY_H godzin od północy w Warszawie) ----------
+export const ARENA_EVERY_MS = 4 * 3600_000;
+const fmtHM = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+/** Godzina „HH:MM” w Warszawie. */
+export const clockHM = (ts) => fmtHM.format(ts);
+/** Start najbliższego (przyszłego) turnieju areny. */
+export function arenaNext(now) {
+  const [h, m, s] = fmtClock.format(now).split(':').map(Number);
+  const elapsed = (h * 3600 + m * 60 + s) * 1000 + (now % 1000);
+  return now - elapsed + (Math.floor(elapsed / ARENA_EVERY_MS) + 1) * ARENA_EVERY_MS;
+}

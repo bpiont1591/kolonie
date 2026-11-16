@@ -16,6 +16,7 @@
     li.className = 'msg' + (m.userId === me ? ' me' : '');
     const head = document.createElement('div'); head.className = 'mh';
     const who = document.createElement('b'); who.textContent = m.user; head.append(who);
+    if (m.title) { const t = document.createElement('span'); t.className = 'ttl'; t.textContent = m.title; head.append(t); }
     if (m.tag) { const t = document.createElement('span'); t.className = 'corp'; t.textContent = `[${m.tag}]`; head.append(' ', t); }
     const time = document.createElement('time'); time.textContent = hhmm(m.at); head.append(time);
     const p = document.createElement('p'); p.textContent = m.text;

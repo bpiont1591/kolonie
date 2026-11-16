@@ -6,6 +6,8 @@ import * as T from '../src/time.js';
 import * as Q from '../src/quests.js';
 import * as C from '../src/corp.js';
 import * as R from '../src/rules.js';
+import * as AR from '../src/arena.js';
+import * as A from '../src/achievements.js';
 let n = 0;
 const t = (name, fn) => { fn(); n++; console.log(`✅ ${name}`); };
 
@@ -100,5 +102,31 @@ t('Przepustka: poziomy, XP ze zdarzeń, nagrody', () => {
   assert.ok(S.passReward(5).energy > 0 && S.passReward(29).metal > S.passReward(1).metal);
   assert.equal(S.badgeForRank(1), 'gold'); assert.equal(S.badgeForRank(7), 'top10');
   assert.ok(S.rankReward(1).metal > S.rankReward(2).metal && S.rankReward(2).metal > S.rankReward(10).metal);
+});
+t('Arena: terminy co 4 h (Warszawa), rozstawienie, drabinka i miejsca', () => {
+  assert.equal(T.arenaNext(Date.parse('2026-11-16T14:30:00Z')), Date.parse('2026-11-16T15:00:00Z')); // 15:30 -> 16:00 w Warszawie
+  assert.equal(T.arenaNext(Date.parse('2026-11-16T15:00:00Z')), Date.parse('2026-11-16T19:00:00Z')); // równo 16:00 -> następny 20:00
+  assert.equal(T.arenaNext(Date.parse('2026-11-16T21:10:00Z')), Date.parse('2026-11-16T23:00:00Z')); // 22:10 -> północ
+  assert.equal(T.clockHM(Date.parse('2026-11-16T15:00:00Z')), '16:00');
+  assert.deepEqual(AR.seedOrder(8), [1, 8, 4, 5, 2, 7, 3, 6]);
+  assert.equal(AR.bracketSize(5), 8); assert.equal(AR.bracketSize(2), 2);
+  assert.equal(AR.roundName(2, 3), 'Finał'); assert.equal(AR.roundName(0, 3), 'Ćwierćfinał');
+  const mk = (id, g) => { const u = { level: 5, s_hull: 1, s_guns: g, s_shields: 1 }; return { id, name: 'P' + id, level: 5, u, stats: R.shipStats(u) }; };
+  let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const out = AR.runTournament([1, 2, 3, 4, 5].map((i) => mk(i, i)), rnd);
+  assert.equal(out.size, 8); assert.equal(out.rounds.length, 3);
+  assert.equal(out.rounds[0].filter((m) => !m.a || !m.b).length, 3); // 3 wolne losy dla rozstawionych
+  const places = [...out.places.values()].sort((a, b) => a - b);
+  assert.deepEqual(places, [1, 2, 3, 3, 5]);
+  assert.ok(AR.placeReward(1).metal > AR.placeReward(2).metal && AR.placeReward(3).metal > AR.placeReward(9).metal);
+});
+t('Osiągnięcia: progi, postęp i tytuły', () => {
+  const s = { tutDone: 1, pve: 30, pvp: 0, mine: 3, minB: 1, expeditions: 0, level: 4, corp: 0, boss: 0, arena: 0, arenaWins: 0, streak: 2, pass: 0 };
+  const ids = A.newlyEarned(s, new Set()).map((a) => a.id);
+  assert.deepEqual(ids, ['kadet', 'pierwsza_krew', 'lowca']);
+  assert.deepEqual(A.newlyEarned(s, new Set(ids)), []);
+  assert.deepEqual(A.progress(A.BY_ID.postrach, s), [30, 100]);
+  assert.equal(A.titleOf('lowca'), 'Łowca piratów'); assert.equal(A.titleOf('pierwsza_krew'), ''); assert.equal(A.titleOf('xyz'), '');
+  assert.equal(new Set(A.LIST.map((a) => a.id)).size, A.COUNT);
 });
 console.log(`\n🎉 Testy jednostkowe: ${n} OK`);

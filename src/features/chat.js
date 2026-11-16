@@ -1,3 +1,4 @@
+import { titleOf } from '../achievements.js';
 // Etap 4: czat globalny i korporacyjny (odpytywanie HTTP, limity, filtr wulgaryzmów, escapowanie).
 import { clean, limiter, MAX_LEN } from '../chat.js';
 import { layout, esc } from '../views.js';
@@ -9,7 +10,7 @@ export default function registerChat({ app, db, auth, page, wantsJson, respond }
   const limit = limiter();
   /** 'g' – globalny, 'k' – korporacja gracza. Zwraca id kanału w bazie albo null (brak dostępu). */
   const channel = (u, k) => (k === 'k' ? (u.corp_id ? `c${u.corp_id}` : null) : 'g');
-  const out = (r) => ({ id: Number(r.id), userId: Number(r.user_id), user: r.username, tag: r.tag || '', text: r.text, at: Number(r.created_at) });
+  const out = (r) => ({ id: Number(r.id), userId: Number(r.user_id), user: r.username, tag: r.tag || '', title: r.title || '', text: r.text, at: Number(r.created_at) });
   const recent = async (ch, after = 0) => (after > 0
     ? await db.all('SELECT * FROM chat_messages WHERE channel = ? AND id > ? ORDER BY id ASC LIMIT 100', [ch, after])
     : (await db.all('SELECT * FROM chat_messages WHERE channel = ? ORDER BY id DESC LIMIT ?', [ch, HISTORY])).reverse());
@@ -36,7 +37,7 @@ export default function registerChat({ app, db, auth, page, wantsJson, respond }
       </form>
       <small class="muted chat-rules"><span data-count>0/${MAX_LEN}</span> · maks. ${MAX_LEN} znaków, bez spamu i wulgaryzmów</small>
     </section>`;
-    return layout({ title: 'Czat', user: u, st, flash: req.flash, active: 'czat', body, head: '<script src="/chat.js?v=11" defer></script>' });
+    return layout({ title: 'Czat', user: u, st, flash: req.flash, active: 'czat', body, head: '<script src="/chat.js?v=12" defer></script>' });
   }));
 
   app.get('/api/czat', auth, async (req, res, next) => {
@@ -66,8 +67,8 @@ export default function registerChat({ app, db, auth, page, wantsJson, respond }
       const dup = await db.get('SELECT text FROM chat_messages WHERE user_id = ? AND channel = ? AND created_at > ? ORDER BY id DESC LIMIT 1', [u.id, ch, now - 60_000]);
       if (dup && dup.text === c.text) return reply(false, 'Ta sama wiadomość przed chwilą – bez spamu.', {}, 429);
       const tag = u.corp_id ? (await db.get('SELECT tag FROM corps WHERE id = ?', [u.corp_id]))?.tag : null;
-      const id = await db.insert('INSERT INTO chat_messages (channel, user_id, username, tag, text, created_at) VALUES (?, ?, ?, ?, ?, ?)', [ch, u.id, u.username, tag || null, c.text, now]);
-      reply(true, 'Wysłano.', { message: out({ id, user_id: u.id, username: u.username, tag, text: c.text, created_at: now }) });
+      const id = await db.insert('INSERT INTO chat_messages (channel, user_id, username, tag, title, text, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)', [ch, u.id, u.username, tag || null, titleOf(u.title), c.text, now]);
+      reply(true, 'Wysłano.', { message: out({ id, user_id: u.id, username: u.username, tag, title: titleOf(u.title), text: c.text, created_at: now }) });
     } catch (e) { next(e); }
   };
   app.post('/api/czat', auth, post);
