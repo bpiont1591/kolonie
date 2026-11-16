@@ -13,6 +13,9 @@ import registerExpeditions from './features/expeditions.js';
 import { dur } from './time.js';
 import * as C from './corp.js';
 import registerCorp from './features/corp.js';
+import registerChat from './features/chat.js';
+import registerPush from './features/push.js';
+import { N, fire } from './notify.js';
 
 const scrypt = promisify(crypto.scrypt);
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -370,6 +373,9 @@ app.post('/bitwa/gracz/:id', auth, action('/bitwa', async (t, u, now, req) => {
     VALUES (?, 'pvp', ?, ?, ?, ?, ?, ?)`, [now, u.id, d.id, d.username, sim.aWon ? 1 : 0, JSON.stringify(sim.log), JSON.stringify(rw)]);
   await G.track(t, u.id, now, { pvp: 1, win: sim.aWon ? 1 : 0, energy: R.PVP_ENERGY });
   if (sim.aWon) await G.warPoints(t, u, now, C.WAR_POINTS.pvp);
+  fire(() => N.send(d.id, sim.aWon
+    ? { title: 'Twoja kolonia została zaatakowana!', body: `${u.username} przełamał obronę i zabrał ${reward.metal} metalu i ${reward.crystal} kryształów. Tarcza aktywna przez 15 min.`, url: '/bitwa', tag: 'attack' }
+    : { title: 'Odparto atak na kolonię', body: `Twoje drony obroniły kolonię przed ${u.username}.`, url: '/bitwa', tag: 'attack' }));
   return { msg: sim.aWon ? `Zwycięstwo nad ${d.username}! Łup: 🔩${reward.metal} 💎${reward.crystal}` : `${d.username} odparł Twój atak.`,
     redirect: `/bitwa/${battleId}`, data: { battleId, won: sim.aWon, reward: rw, rounds: sim.rounds } };
 }));
@@ -406,6 +412,8 @@ const ctx = { xpGain, preBattle, settledHooks, devHooks, app, db, auth, page, ac
 registerMissions(ctx);
 registerExpeditions(ctx);
 registerCorp(ctx);
+registerChat(ctx);
+registerPush(ctx);
 
 // ---------- narzędzia testowe (tylko lokalnie: DEV_HOOKS=1, nigdy na Renderze) ----------
 if (process.env.DEV_HOOKS === '1' && !process.env.RENDER) {
@@ -426,6 +434,14 @@ if (process.env.DEV_HOOKS === '1' && !process.env.RENDER) {
     await t.run('UPDATE users SET metal = metal + 20000, crystal = crystal + 20000, energy = energy + 20000 WHERE id = ?', [u.id]);
     return { msg: 'ok' };
   }));
+  // Uruchamia skaner powiadomień (bez sesji, by nie rozliczać zaległych budów) i zwraca znaczniki gracza.
+  app.post('/api/dev/push-skan', async (req, res, next) => {
+    try {
+      const sent = await registerPush.scan();
+      const n = await db.get('SELECT notified_bq, notified_mq, notified_ex, notified_storage, bq_until, mq_until, ex_until, collected_at FROM users WHERE id = ?', [Number(req.body.id) || 0]);
+      res.json({ ok: true, sent, enabled: registerPush.enabled, n });
+    } catch (e) { next(e); }
+  });
   app.post('/api/dev/misja', auth, action('/', async (t, u, now, req) => {
     await G.track(t, u.id, now, { [String(req.body.ev)]: Number(req.body.amount) || 1 });
     return { msg: 'ok' };

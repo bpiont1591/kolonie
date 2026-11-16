@@ -26,6 +26,7 @@ Zmienne środowiskowe:
 | `GAME_SPEED` | `1` | mnożnik tempa produkcji i napraw (np. `20` do testów) |
 | `DATABASE_URL` | – | adres Postgresa (Neon); bez niego używany jest SQLite |
 | `COOKIE_SECURE` | – | ustaw `1` za HTTPS, by ciasteczko sesji miało flagę `Secure` |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | – | klucze Web Push (`npx web-push generate-vapid-keys`); bez nich powiadomienia są wyłączone. Nigdy nie commituj klucza prywatnego (`.env*` jest w .gitignore). |
 
 Inne komendy:
 

@@ -46,6 +46,7 @@
   if (cds.length || bars.length) setInterval(() => { cdTick(); barTick(); }, 1000);
   if (res.length || hp) setInterval(tick, 1000);
   document.addEventListener('submit', (e) => {
+    if (e.target.hasAttribute('data-keep')) return;
     const b = e.target.querySelector('button');
     if (b) setTimeout(() => { b.disabled = true; }, 0);
   });
@@ -55,4 +56,53 @@
   window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferred = e; if (ib) ib.hidden = false; });
   if (ib) ib.addEventListener('click', async () => { if (!deferred) return; deferred.prompt(); await deferred.userChoice; deferred = null; ib.hidden = true; });
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+
+  // Web Push: przycisk zgody na powiadomienia (karta na stronie kolonii).
+  const pc = document.getElementById('push-card');
+  if (pc) {
+    const btn = pc.querySelector('[data-push-toggle]'), test = pc.querySelector('[data-push-test]'), st = pc.querySelector('[data-push-status]');
+    const say = (m) => { st.textContent = m; };
+    const post = (url, body) => fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify(body || {}) }).then((r) => r.json());
+    const u8 = (b64) => { const p = '='.repeat((4 - b64.length % 4) % 4); const raw = atob((b64 + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(raw, (c) => c.charCodeAt(0)); };
+    const ok = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+    let sub = null;
+    const render = () => {
+      btn.hidden = false; btn.disabled = false;
+      btn.textContent = sub ? 'Wyłącz powiadomienia' : 'Włącz powiadomienia';
+      btn.classList.toggle('ghost', !!sub);
+      test.hidden = !sub;
+      pc.classList.toggle('on', !!sub);
+      if (Notification.permission === 'denied') say('Powiadomienia są zablokowane w ustawieniach przeglądarki.');
+      else say(sub ? 'Włączone na tym urządzeniu: ataki, pełny magazyn, budowy, ekspedycje i bossowie.' : 'Dowiedz się od razu, gdy ktoś Cię zaatakuje albo skończy się budowa.');
+    };
+    if (!ok) say(/iPhone|iPad/.test(navigator.userAgent) ? 'Na iPhonie dodaj Kolonie do ekranu głównego (Udostępnij → Do ekranu początkowego), aby włączyć powiadomienia.' : 'Ta przeglądarka nie obsługuje powiadomień push.');
+    else navigator.serviceWorker.ready.then(async (reg) => {
+      sub = await reg.pushManager.getSubscription();
+      if (sub) post('/api/push/subskrypcja', sub.toJSON()).catch(() => {});
+      render();
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        try {
+          if (sub) {
+            await post('/api/push/wypisz', { endpoint: sub.endpoint }).catch(() => {});
+            await sub.unsubscribe(); sub = null;
+          } else {
+            if (await Notification.requestPermission() !== 'granted') { render(); say('Bez zgody przeglądarki nie wyślemy powiadomień.'); return; }
+            const k = await fetch('/api/push/klucz', { headers: { accept: 'application/json' } }).then((r) => r.json());
+            if (!k.ok) throw new Error(k.msg || 'Powiadomienia są chwilowo niedostępne.');
+            sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: u8(k.key) });
+            const r = await post('/api/push/subskrypcja', sub.toJSON());
+            if (!r.ok) { await sub.unsubscribe(); sub = null; throw new Error(r.msg); }
+          }
+          render();
+        } catch (e) { render(); say(e.message || 'Nie udało się zmienić ustawień powiadomień.'); }
+      });
+      test.addEventListener('click', async () => {
+        test.disabled = true;
+        const r = await post('/api/push/test').catch(() => ({ ok: false }));
+        say(r.ok ? 'Wysłano powiadomienie testowe.' : (r.msg || 'Nie udało się wysłać testu.'));
+        setTimeout(() => { test.disabled = false; }, 3000);
+      });
+    });
+  }
 })();

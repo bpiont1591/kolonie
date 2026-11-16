@@ -123,7 +123,7 @@ body.landing main{max-width:none;padding:0 0 30px}
 body.landing main>section:not(.hero-full):not(.battle-teaser),body.landing .footer,body.landing main>.flash{width:min(560px,calc(100% - 24px));margin-left:auto;margin-right:auto}
 body.landing main>.flash{position:fixed;top:10px;left:0;right:0;z-index:20}
 .hero-full{position:relative;min-height:100svh;display:flex;align-items:flex-end;justify-content:center;overflow:hidden;text-align:center}
-.hero-bg{position:absolute;inset:0;background:url(/img/hero.webp?v=6) center 60%/cover no-repeat;transform:scale(1.04);animation:heroZoom 24s ease-in-out infinite alternate}
+.hero-bg{position:absolute;inset:0;background:url(/img/hero.webp?v=7) center 60%/cover no-repeat;transform:scale(1.04);animation:heroZoom 24s ease-in-out infinite alternate}
 @keyframes heroZoom{to{transform:scale(1.12) translateY(-1.5%)}}
 .hero-full::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(5,9,24,.55) 0%,rgba(5,9,24,.05) 30%,rgba(5,9,24,.35) 55%,rgba(5,9,24,.96) 88%,var(--bg) 100%)}
 .hero-inner{position:relative;z-index:1;padding:0 18px 54px;max-width:620px}
@@ -148,7 +148,7 @@ body.landing main>.flash{position:fixed;top:10px;left:0;right:0;z-index:20}
 .feature img{width:104px;height:104px;border-radius:14px;object-fit:cover;border:1px solid rgba(62,230,255,.3)}
 .feature h3{margin:0 0 4px;color:#fff}.feature p{margin:0;font-size:.9rem;line-height:1.45;color:#c4cdee}
 .battle-teaser{position:relative;margin:34px 0;padding:44px 0 30px;overflow:hidden}
-.bt-bg{position:absolute;inset:0;background:linear-gradient(180deg,var(--bg),rgba(5,9,24,.35) 25%,rgba(5,9,24,.45) 70%,var(--bg)),url(/img/battle_bg.webp?v=6) center/cover}
+.bt-bg{position:absolute;inset:0;background:linear-gradient(180deg,var(--bg),rgba(5,9,24,.35) 25%,rgba(5,9,24,.45) 70%,var(--bg)),url(/img/battle_bg.webp?v=7) center/cover}
 .bt-inner{position:relative;max-width:620px;margin:0 auto;padding:0 14px;text-align:center}
 .bt-inner p{color:#d6e1ff;text-shadow:0 2px 8px #000;line-height:1.5}
 .pirates{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;padding:8px 2px 4px;margin-top:16px;scrollbar-width:none}
@@ -381,3 +381,30 @@ body.landing main>.flash{position:fixed;top:10px;left:0;right:0;z-index:20}
 .bar.boss-hp{height:26px}.bar.boss-hp i{background:linear-gradient(90deg,#8a1060,#ff4fd8 60%,#ff9d3c)}
 .bar.boss-hp span{line-height:24px;font-size:.85rem}
 .boss-atk{font-size:1.15rem;padding:15px}
+/* ===== v4 etap 4: czat i powiadomienia ===== */
+.rank-link{display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.04);flex:none}
+.rank-link .pi{width:28px;height:28px}.rank-link.on{border-color:rgba(255,196,77,.6);box-shadow:0 0 14px rgba(255,196,77,.25)}
+.seg a.off{opacity:.55}.seg a.off .gi{width:16px;height:16px}
+.chat-head{display:flex;align-items:center;gap:12px;padding:10px 14px;background:linear-gradient(90deg,rgba(62,230,255,.12),rgba(18,26,56,.8))}
+.chat-head h2{margin:0;font-size:1.1rem}
+.chat{padding:8px 10px 10px;display:flex;flex-direction:column}
+.msgs{list-style:none;margin:0;padding:4px 2px;height:min(58vh,520px);overflow-y:auto;display:flex;flex-direction:column;gap:6px;overscroll-behavior:contain;scrollbar-width:thin}
+.msgs .empty{margin:auto;text-align:center;padding:20px}
+.msg{max-width:86%;align-self:flex-start;background:rgba(255,255,255,.055);border:1px solid var(--line);border-radius:4px 14px 14px 14px;padding:6px 10px}
+.msg.me{align-self:flex-end;background:linear-gradient(135deg,rgba(31,184,255,.22),rgba(123,92,255,.22));border-color:rgba(62,230,255,.35);border-radius:14px 4px 14px 14px}
+.msg .mh{display:flex;align-items:baseline;gap:4px;font-size:.74rem;color:var(--mut)}
+.msg .mh b{color:var(--acc);font-family:Rajdhani,system-ui,sans-serif;font-size:.9rem;letter-spacing:.02em}
+.msg.me .mh b{color:#c9b8ff}.msg .mh .corp{color:var(--warn);font-weight:700}
+.msg .mh time{margin-left:auto;padding-left:10px;font-variant-numeric:tabular-nums;opacity:.8}
+.msg p{margin:2px 0 0;overflow-wrap:anywhere;white-space:pre-wrap;line-height:1.35}
+.chat-form{display:flex;gap:8px;margin-top:8px}
+.chat-form input{flex:1;min-width:0;background:rgba(0,0,0,.35);border:1px solid var(--line);border-radius:12px;color:var(--txt);padding:11px 12px;font-size:16px}
+.chat-form input:focus{outline:none;border-color:var(--acc);box-shadow:0 0 0 3px rgba(62,230,255,.15)}
+.chat-form .btn{width:48px;padding:0;display:flex;align-items:center;justify-content:center;flex:none}
+.chat-form .send{width:22px;height:22px;transform:rotate(90deg)}
+.chat-rules{display:block;margin-top:6px;font-size:.72rem}.chat-rules .warn{color:var(--warn)}
+.chat .flash{margin:8px 0 0}
+.push-card{border-color:rgba(255,196,77,.3);background:linear-gradient(90deg,rgba(255,170,60,.1),rgba(18,26,56,.8))}
+.push-card.on{border-color:rgba(61,255,168,.35);background:linear-gradient(90deg,rgba(61,255,168,.1),rgba(18,26,56,.8))}
+.push-btns{display:flex;gap:8px;margin-top:10px}.push-btns .btn.primary{flex:1}
+.btn.ghost{background:rgba(255,255,255,.06);color:var(--txt);box-shadow:none}

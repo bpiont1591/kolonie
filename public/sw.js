@@ -1,8 +1,8 @@
 // Service worker: zasoby statyczne z cache, strony gry zawsze z sieci (serwer jest źródłem prawdy).
-const CACHE = 'kolonie-v6';
-const ASSETS = ['/style.css?v=6', '/app.js?v=6', '/icon-192.png?v=6', '/manifest.webmanifest', '/offline.html',
-  '/fonts/rajdhani-bold.woff2', '/fonts/rajdhani-semibold.woff2', '/img/logo.webp?v=6',
-  '/img/r_metal.webp?v=6', '/img/r_crystal.webp?v=6', '/img/r_energy.webp?v=6'];
+const CACHE = 'kolonie-v7';
+const ASSETS = ['/style.css?v=7', '/app.js?v=7', '/icon-192.png?v=7', '/manifest.webmanifest', '/offline.html',
+  '/fonts/rajdhani-bold.woff2', '/fonts/rajdhani-semibold.woff2', '/img/logo.webp?v=7',
+  '/img/r_metal.webp?v=7', '/img/r_crystal.webp?v=7', '/img/r_energy.webp?v=7'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
@@ -24,4 +24,22 @@ self.addEventListener('fetch', (e) => {
     return;
   }
   e.respondWith(caches.match(req).then((hit) => hit || fetch(req)));
+});
+// Web Push: powiadomienia z gry (atak, pełny magazyn, budowa, ekspedycja, boss).
+self.addEventListener('push', (e) => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch { d = { body: e.data && e.data.text() }; }
+  const title = d.title || 'Kolonie';
+  e.waitUntil(self.registration.showNotification(title, {
+    body: d.body || '', icon: '/icon-192.png?v=7', badge: '/icon-192.png?v=7', tag: d.tag || 'kolonie',
+    renotify: !!d.tag, data: { url: d.url || '/kolonia' }, lang: 'pl',
+  }));
+});
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const url = new URL((e.notification.data && e.notification.data.url) || '/kolonia', location.origin).href;
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((ws) => {
+    for (const w of ws) if (w.url.startsWith(location.origin) && 'focus' in w) { w.navigate(url); return w.focus(); }
+    return self.clients.openWindow(url);
+  }));
 });

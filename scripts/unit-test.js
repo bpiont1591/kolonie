@@ -1,4 +1,5 @@
 // Testy jednostkowe czystych reguł (bez serwera).
+import * as Chat from '../src/chat.js';
 import assert from 'node:assert/strict';
 import * as T from '../src/time.js';
 import * as Q from '../src/quests.js';
@@ -57,5 +58,26 @@ t('Boss: podział nagród sumuje się do puli', () => {
   const sum = dmg.map((d) => C.bossShare(pool, d, tot, 3).metal).reduce((a, b) => a + b, 0);
   assert.ok(Math.abs(sum - pool.metal) <= 3);
   assert.ok(C.bossPool(3, 3, false).metal < pool.metal);
+});
+t('Czat: normalizacja, długość i filtr wulgaryzmów', () => {
+  assert.equal(Chat.clean('  hej\n\tkomandorze  ').text, 'hej komandorze');
+  assert.ok(Chat.clean('').error);
+  assert.ok(Chat.clean('\u0000\u200b ').error);
+  assert.ok(Chat.clean('a'.repeat(201)).error);
+  assert.equal(Chat.clean('ą'.repeat(200)).text.length, 200);
+  assert.equal(Chat.clean('ty KURWA mać').text, 'ty K**** mać');
+  assert.equal(Chat.clean('Chujowy plan').text.includes('huj'), false);
+  assert.equal(Chat.clean('ładna planeta, szybki statek').text, 'ładna planeta, szybki statek');
+  assert.equal(Chat.clean('<b>x</b>').text, '<b>x</b>'); // escapowanie przy wyświetlaniu, nie przy zapisie
+});
+t('Czat: limiter tempa', () => {
+  const lim = Chat.limiter();
+  assert.equal(lim(1, 0), null);
+  assert.ok(lim(1, 1000)); // < 2 s
+  assert.equal(lim(2, 1000), null); // inny gracz niezależnie
+  let blocked = 0;
+  for (let i = 1; i <= 8; i++) if (lim(1, i * 2500)) blocked++;
+  assert.ok(blocked >= 2); // maks. 6 na 30 s
+  assert.equal(lim(1, 60_000), null);
 });
 console.log(`\n🎉 Testy jednostkowe: ${n} OK`);

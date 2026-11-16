@@ -51,11 +51,12 @@ export function layout({ title, user, st, body, flash, active = '', head = '', b
     <div class="res">
       ${R.RES_KEYS.map((k) => `<span>${resIcon(k)}<b>${fmt(st.stock[k])}</b></span>`).join('')}
     </div>
+    <a class="rank-link${active === 'ranking' ? ' on' : ''}" href="/ranking" aria-label="Ranking" title="Ranking">${pi('trophy', 30)}</a>
     <div class="who">${lvBadge(user.level, 'sm')}<span>${esc(user.username)}</span></div>
   </header>` : '';
   const tabs = [
     ['kolonia', '/kolonia', 'colony', 'Kolonia'], ['statek', '/statek', 'ship', 'Statek'], ['bitwa', '/bitwa', 'battle', 'Bitwa'],
-    ['misje', '/misje', 'quest', 'Misje'], ['korporacja', '/korporacja', 'corp', 'Korpo'], ['ranking', '/ranking', 'rank', 'Ranking'],
+    ['misje', '/misje', 'quest', 'Misje'], ['korporacja', '/korporacja', 'corp', 'Korpo'], ['czat', '/czat', 'chat', 'Czat'],
   ];
   const nav = user ? `<nav class="tabs">${tabs.map(([id, href, icon, label]) =>
     `<a href="${href}" class="${active === id ? 'on' : ''}"${active === id ? ' aria-current="page"' : ''}>${ic(icon)}<span>${label}</span>${st?.badges?.[id] ? `<i class="badge">${st.badges[id] > 9 ? '9+' : st.badges[id]}</i>` : ''}</a>`).join('')}</nav>` : '';
@@ -337,6 +338,10 @@ export function colony({ user, st, flash, now = Date.now() }) {
     <form method="post" action="/kolonia/zbierz"><button class="btn primary wide collect">${pi('collect', 34, 'btn-pi')} Zbierz surowce</button></form>
   </section>
   <section class="card"><h3 class="with-ic">${ic('colony', 'acc')} Budynki</h3><p class="muted small">Jedna budowa naraz. Rozpoczęcie budowy zbiera surowce z magazynu wydobycia.</p>${blds}</section>
+  <section class="card push-card" id="push-card">
+    <div class="with-ic">${pi('bell', 56, 'float')}<div class="grow"><h3 style="margin:0">Powiadomienia</h3><small class="muted" data-push-status>Dowiedz się od razu, gdy ktoś Cię zaatakuje albo skończy się budowa.</small></div></div>
+    <div class="push-btns"><button type="button" class="btn primary" data-push-toggle hidden>Włącz powiadomienia</button><button type="button" class="btn sm" data-push-test hidden>Wyślij test</button></div>
+  </section>
   <div class="logout"><form method="post" action="/wyloguj"><button class="btn sm">${ic('logout')} Wyloguj</button></form></div>` });
 }
 

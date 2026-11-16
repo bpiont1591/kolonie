@@ -1,4 +1,5 @@
 // Etap 3: korporacje – role, skarbiec i ulepszenia, wojna o sektor, boss rajdowy.
+import { N, fire } from '../notify.js';
 import * as R from '../rules.js';
 import * as C from '../corp.js';
 import * as G from '../game.js';
@@ -189,7 +190,7 @@ export default function registerCorp({ app, db, auth, page, action, payable, cos
     const id = await t.insert("INSERT INTO bosses (corp_id, level, max_hp, hp, spawned_at, ends_at, status) VALUES (?, ?, ?, ?, ?, ?, 'active')",
       [u.corp_id, level, hp, hp, now, now + C.BOSS.hours * 3600_000]);
     await G.corpLog(t, u.corp_id, now, `${u.username} namierza bossa: ${C.BOSS.name} (poz. ${level}).`);
-    for (const h of bossHooks) Promise.resolve(h(u.corp_id, { id, level, hp })).catch(() => {});
+    for (const h of bossHooks) Promise.resolve(h(u.corp_id, { id, level, hp }, u)).catch(() => {});
     return { msg: `${C.BOSS.name} pojawia się w sektorze! Macie ${C.BOSS.hours} h.`, data: { bossId: id, hp, level } };
   }));
   app.post('/korporacja/boss/atak', auth, action('/korporacja/boss', async (t, u, now) => {
@@ -231,7 +232,8 @@ export default function registerCorp({ app, db, auth, page, action, payable, cos
     return { msg: `${killed ? 'Łupy z bossa' : 'Nagroda pocieszenia'}: ${G.rewardText(got)}`, data: { reward: got, killed } };
   }));
 
-  const bossHooks = [];
+  const bossHooks = [(corpId, b, by) => fire(() => N.toCorp(corpId, by.id, {
+    title: 'Boss w sektorze!', body: `${C.BOSS.name} (poz. ${b.level}) atakuje. Macie ${C.BOSS.hours} h – do dział, komandorze!`, url: '/korporacja/boss', tag: 'boss' }))];
   registerCorp.bossHooks = bossHooks;
   devHooks.push(async (t, u, ms) => {
     if (u.corp_id) await t.run("UPDATE bosses SET spawned_at = spawned_at - ?, ends_at = ends_at - ?, ended_at = CASE WHEN ended_at > 0 THEN ended_at - ? ELSE 0 END WHERE corp_id = ?", [ms, ms, ms, u.corp_id]);

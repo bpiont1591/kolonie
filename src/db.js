@@ -153,6 +153,31 @@ export const MIGRATIONS = [
       PRIMARY KEY (boss_id, user_id)
     )`,
   ]],
+  ['004_chat_push', [
+    `CREATE TABLE IF NOT EXISTS chat_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      channel TEXT NOT NULL,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      username TEXT NOT NULL,
+      tag TEXT,
+      text TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    )`,
+    'CREATE INDEX IF NOT EXISTS chat_channel ON chat_messages(channel, id DESC)',
+    `CREATE TABLE IF NOT EXISTS push_subs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      endpoint TEXT NOT NULL UNIQUE,
+      p256dh TEXT NOT NULL,
+      auth TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    )`,
+    'CREATE INDEX IF NOT EXISTS push_subs_user ON push_subs(user_id)',
+    'ALTER TABLE users ADD COLUMN notified_bq INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE users ADD COLUMN notified_mq INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE users ADD COLUMN notified_ex INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE users ADD COLUMN notified_storage INTEGER NOT NULL DEFAULT 0',
+  ]],
 ];
 
 async function migrate(api, conv = (s) => s) {

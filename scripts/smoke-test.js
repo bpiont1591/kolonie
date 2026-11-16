@@ -25,6 +25,12 @@ class Client {
   }
   get(p, json = true) { return this.req('GET', p, null, json); }
   post(p, b = {}) { return this.req('POST', p, b); }
+  async postJson(path, body) {
+    const res = await fetch(BASE + path, { method: 'POST', headers: { cookie: this.cookie, accept: 'application/json', 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const text = await res.text();
+    let data; try { data = JSON.parse(text); } catch { data = text; }
+    return { status: res.status, data };
+  }
 }
 
 const suffix = Date.now().toString(36).slice(-5);
@@ -247,7 +253,68 @@ check(r.data.ok, 'Przywódca usuwa członka', r.data.msg);
 r = await B.post(`/korporacja/dolacz/${corpId}`);
 check(r.data.ok, 'Ponowne dołączenie', r.data.msg);
 
-for (const p of ['/korporacja/wojna', '/korporacja/boss', '/kolonia', '/statek', '/bitwa', '/misje', '/korporacja', '/ranking', '/ranking?tab=pvp', '/ranking?tab=korporacje']) {
+// ---------- etap 4: czat ----------
+const D = new Client(`Vega_${suffix}`);
+r = await D.post('/rejestracja', { username: D.name, password: 'haslo789' });
+D.id = r.data.userId;
+r = await A.postJson('/api/czat', { kanal: 'g', tekst: `Witajcie w sektorze! ${suffix}` });
+check(r.status === 200 && r.data.ok && r.data.message.id > 0, 'Czat: wysłanie wiadomości globalnej', r.data.msg);
+const firstId = r.data.message?.id || 0;
+r = await A.postJson('/api/czat', { kanal: 'g', tekst: 'druga za szybko' });
+check(r.status === 429, 'Czat: limit tempa (min. 2 s między wiadomościami)', r.data.msg);
+r = await A.postJson('/api/czat', { kanal: 'g', tekst: 'x'.repeat(201) });
+check(r.status === 400, 'Czat: limit długości 200 znaków', r.data.msg);
+r = await A.postJson('/api/czat', { kanal: 'g', tekst: '   \u0007  ' });
+check(r.status === 400, 'Czat: pusta wiadomość odrzucona');
+await sleep(2100);
+r = await D.postJson('/api/czat', { kanal: 'g', tekst: `<script>alert(1)</script><b>hej</b> ${suffix}` });
+check(r.data.ok, 'Czat: wiadomość z HTML przyjęta jako tekst');
+await sleep(2100);
+r = await D.postJson('/api/czat', { kanal: 'g', tekst: `ty kurwa ${suffix}` });
+check(r.data.ok && !/kurwa/i.test(r.data.message.text) && r.data.message.text.startsWith('ty k*'), 'Czat: filtr wulgaryzmów', r.data.message?.text);
+r = await B.get(`/api/czat?kanal=g&po=${firstId - 1}`);
+check(r.data.ok && r.data.messages.length >= 3 && r.data.messages.some((m) => m.text.includes('<script>')), 'Czat: pobieranie nowych wiadomości (po id)', `${r.data.messages?.length} wiad.`);
+r = await B.get('/czat', false);
+check(r.status === 200 && r.data.includes('&lt;script&gt;alert(1)&lt;/script&gt;') && !r.data.includes('<script>alert(1)'), 'Czat: HTML escapowany na stronie');
+r = await B.postJson('/api/czat', { kanal: 'k', tekst: `Tajna narada korpo ${suffix}` });
+check(r.data.ok, 'Czat korporacji: wysłanie', r.data.msg);
+r = await A.get('/api/czat?kanal=k');
+check(r.data.ok && r.data.messages.some((m) => m.text === `Tajna narada korpo ${suffix}`), 'Czat korporacji: widoczny dla członków');
+r = await D.get('/api/czat?kanal=k');
+check(r.status === 403, 'Czat korporacji: brak dostępu dla obcych');
+r = await D.postJson('/api/czat', { kanal: 'k', tekst: 'wpuśćcie mnie' });
+check(r.status === 403, 'Czat korporacji: obcy nie może pisać');
+r = await D.get('/api/czat?kanal=g');
+check(!r.data.messages.some((m) => m.text.includes('Tajna narada')), 'Czat: kanały rozdzielone');
+
+// ---------- etap 4: Web Push ----------
+r = await A.get('/api/push/klucz');
+const PUSH = r.status === 200 && r.data.ok;
+check(PUSH && /^[A-Za-z0-9_-]{80,90}$/.test(r.data.key), 'Push: publiczny klucz VAPID', PUSH ? `${r.data.key.length} znaków` : `status ${r.status}`);
+const fakeSub = { endpoint: `https://push.invalid/kolonie-test-${suffix}`, keys: { p256dh: 'B' + 'A'.repeat(86), auth: 'QUFBQUFBQUFBQUFBQUFBQQ' } };
+r = await A.postJson('/api/push/subskrypcja', { endpoint: 'http://zly.example/x', keys: fakeSub.keys });
+check(r.status === 400 || !PUSH, 'Push: subskrypcja bez HTTPS odrzucona');
+if (PUSH) {
+  r = await A.postJson('/api/push/subskrypcja', fakeSub);
+  check(r.data.ok && r.data.devices === 1, 'Push: zapis subskrypcji (opt-in)', r.data.msg);
+  r = await A.postJson('/api/push/subskrypcja', fakeSub);
+  check(r.data.ok && r.data.devices === 1, 'Push: ponowna subskrypcja bez duplikatu');
+  r = await A.postJson('/api/push/test', {});
+  check(r.data.ok && r.data.sent === 0, 'Push: wysyłka testowa (nieosiągalny adres nie psuje serwera)', r.data.msg);
+  if (DEV) {
+    await A.post('/api/dev/przewin', { minutes: 130 });
+    r = await new Client('anon').postJson('/api/dev/push-skan', { id: A.id });
+    check(r.data.ok && r.data.n.notified_storage === r.data.n.collected_at, 'Push: skaner wykrywa pełny magazyn', `sent=${r.data.sent}`);
+    r = await new Client('anon').postJson('/api/dev/push-skan', { id: A.id });
+    check(r.data.ok && r.data.sent === 0, 'Push: brak powtórnego powiadomienia');
+  }
+  r = await A.postJson('/api/push/wypisz', { endpoint: fakeSub.endpoint });
+  check(r.data.ok, 'Push: wypisanie (opt-out)', r.data.msg);
+}
+r = await new Client('anon').postJson('/api/push/subskrypcja', fakeSub);
+check(r.status === 401, 'Push: subskrypcja wymaga logowania');
+
+for (const p of ['/czat', '/czat?kanal=k', '/korporacja/wojna', '/korporacja/boss', '/kolonia', '/statek', '/bitwa', '/misje', '/korporacja', '/ranking', '/ranking?tab=pvp', '/ranking?tab=korporacje']) {
   r = await A.get(p, false);
   check(r.status === 200 && r.data.includes('</html>'), `Strona ${p}`);
 }
