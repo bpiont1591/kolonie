@@ -3,6 +3,7 @@ import { SPRITE, ic, pi, lvBadge, V as ASSET_V } from './icons.js';
 import * as Q from './quests.js';
 import { dur, clockHM } from './time.js';
 import { titleOf } from './achievements.js';
+import * as P from './progression.js';
 export { ic, pi, lvBadge };
 
 /** Polska odmiana: plural(2, 'nagroda', 'nagrody', 'nagród') -> 'nagrody'. */
@@ -384,11 +385,11 @@ export function colony({ user, st, flash, now = Date.now() }) {
 
 export function ship({ user, st, flash, now = Date.now() }) {
   const cap = R.moduleCap(user);
-  const base = R.shipStats(user);
+  const sAt = (col, d) => R.shipStats({ ...user, [col]: user[col] + d });
   const modEff = {
-    hull: (d) => `${ic('heart', 'hp-ic')} ${base.maxHp + 40 * d} HP`,
-    guns: (d) => `${pi('guns', 16, 'inl')} atak ${base.atk + 6 * d}`,
-    shields: (d) => `${pi('shields', 16, 'inl')} obrona ${base.def + 4 * d}`,
+    hull: (d) => `${ic('heart', 'hp-ic')} ${sAt('s_hull', d).maxHp} HP`,
+    guns: (d) => `${pi('guns', 16, 'inl')} atak ${sAt('s_guns', d).atk}`,
+    shields: (d) => `${pi('shields', 16, 'inl')} obrona ${sAt('s_shields', d).def}`,
   };
   const mods = Object.entries(R.MODULES).map(([id, m]) => {
     const lvl = user[m.col];
@@ -400,8 +401,9 @@ export function ship({ user, st, flash, now = Date.now() }) {
   }).join('');
   return layout({ title: 'Statek', user, st, flash, active: 'statek', body: `
   <section class="card center ship-card" style="--shield:${Math.min(0.15 + user.s_shields * 0.07, 0.8).toFixed(2)}">
-    <div class="ship-art">${img('ship', 'Twój statek', '', 320, true)}</div>
+    <div class="ship-art">${img(P.CLASSES[user.ship_class] ? `cls_${user.ship_class}` : 'ship', 'Twój statek', '', 320, true)}</div>
     <h2>Statek „${esc(user.username)}”</h2>
+    ${P.CLASSES[user.ship_class] ? `<a class="cls-badge" href="/statek/klasa">${ic(P.CLASSES[user.ship_class].icon)}${P.CLASSES[user.ship_class].name}</a>` : ''}
     ${hpBar(st)}
     <div class="stats">
       <div>${pi('guns', 40)}<b>${st.ship.atk}</b><small>Atak</small></div>
@@ -410,6 +412,11 @@ export function ship({ user, st, flash, now = Date.now() }) {
       <div>${pi('power', 40)}<b>${st.ship.power}</b><small>Siła</small></div>
     </div>
   </section>
+  ${!user.ship_class && !(user.tut_step >= 1 && user.tut_step <= 5) ? `<a class="callout gold" href="/statek/klasa"><span class="big-glyph sm">${ic('ship', 'acc')}</span><span class="grow"><b>Wybierz klasę statku</b><br><small>Szturmowiec, Krążownik, Zwiadowca czy Wsparcie? Pierwszy wybór za darmo.</small></span>${ic('up', 'chev-r')}</a>` : ''}
+  <div class="duo">
+    <a class="callout" href="/statek/klasa"><span class="big-glyph sm">${ic(P.CLASSES[user.ship_class]?.icon || 'ship', 'acc')}</span><span class="grow"><b>Klasa statku</b><br><small>${P.CLASSES[user.ship_class]?.name || 'nie wybrano'}</small></span></a>
+    <a class="callout" href="/badania"><span class="big-glyph sm">${ic('flask', 'acc')}</span><span class="grow"><b>Badania</b><br><small>${user.rq_id ? `trwa: ${P.TECH_BY_ID[user.rq_id]?.name}` : `${P.rpFree(user)} wolnych PB`}</small></span></a>
+  </div>
   ${expeditionCallout(user, now)}
   <section class="card"><h3 class="with-ic">${ic('ship', 'acc')} Moduły</h3><p class="muted small">Limit poziomu modułów: ${cap} (2 × poziom stoczni). Za surowce z magazynu głównego.</p>${mods}</section>` });
 }

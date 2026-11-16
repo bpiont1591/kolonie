@@ -319,6 +319,13 @@ export const MIGRATIONS = [
       created_at INTEGER NOT NULL
     )`,
   ]],
+  ['011_classes_tech', [
+    "ALTER TABLE users ADD COLUMN ship_class TEXT NOT NULL DEFAULT ''",
+    'ALTER TABLE users ADD COLUMN class_changed_at INTEGER NOT NULL DEFAULT 0',
+    "ALTER TABLE users ADD COLUMN tech TEXT NOT NULL DEFAULT ''",
+    'ALTER TABLE users ADD COLUMN rq_id TEXT',
+    'ALTER TABLE users ADD COLUMN rq_until INTEGER NOT NULL DEFAULT 0',
+  ]],
 ];
 
 async function migrate(api, conv = (s) => s) {

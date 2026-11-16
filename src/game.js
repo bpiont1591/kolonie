@@ -1,3 +1,4 @@
+import * as P from './progression.js';
 // Wspólne operacje gry na bazie (używane przez trasy): nagrody, śledzenie misji.
 import * as R from './rules.js';
 import * as Q from './quests.js';
@@ -90,9 +91,9 @@ export async function questBadge(db, u, now) {
 }
 
 // ---------- Etap 2: kolejki budowy i ekspedycje (kończone „przy odczycie”, bez crona) ----------
-export const isDue = (u, now) => !!((u.bq_id && u.bq_until <= now) || (u.mq_id && u.mq_until <= now) || (u.ex_until && u.ex_until <= now));
+export const isDue = (u, now) => !!((u.bq_id && u.bq_until <= now) || (u.mq_id && u.mq_until <= now) || (u.ex_until && u.ex_until <= now) || (u.rq_id && u.rq_until <= now));
 const SETTLE_COLS = ['metal', 'crystal', 'energy', 'collected_at', 'hp', 'hp_at', 'b_mine', 'b_power', 'b_shipyard', 'b_lab',
-  's_hull', 's_guns', 's_shields', 'bq_id', 'bq_until', 'mq_id', 'mq_until', 'ex_until', 'level', 'xp', 'boost_until'];
+  's_hull', 's_guns', 's_shields', 'bq_id', 'bq_until', 'mq_id', 'mq_until', 'ex_until', 'level', 'xp', 'boost_until', 'tech', 'rq_id', 'rq_until'];
 
 /** Kończy zaległe budowy/ekspedycje (w kolejności czasu). Zwraca zaktualizowanego gracza i listę zdarzeń. */
 export async function settle(t, u, now) {
@@ -101,6 +102,7 @@ export async function settle(t, u, now) {
   if (u.bq_id && u.bq_until <= now) evs.push(['b', u.bq_until]);
   if (u.mq_id && u.mq_until <= now) evs.push(['m', u.mq_until]);
   if (u.ex_until && u.ex_until <= now) evs.push(['e', u.ex_until]);
+  if (u.rq_id && u.rq_until <= now) evs.push(['r', u.rq_until]);
   evs.sort((a, b) => a[1] - b[1]);
   let c = { ...u };
   const done = [];
@@ -120,12 +122,17 @@ export async function settle(t, u, now) {
       c.hp = R.currentHp(c, at); c.hp_at = Math.max(c.hp_at, at);
       if (def) { c[def.col] += 1; if (c.mq_id === 'hull') c.hp += 40; done.push({ kind: 'module', id: c.mq_id, name: def.name, level: c[def.col], at }); }
       c.mq_id = null; c.mq_until = 0;
+    } else if (k === 'r') {
+      const n = P.TECH_BY_ID[c.rq_id];
+      collectAt(at); // bonusy technologii (np. wydobycie) liczą się od chwili ukończenia badań
+      if (n && !P.techList(c).includes(n.id)) { c.tech = [...P.techList(c), n.id].join(','); done.push({ kind: 'research', id: n.id, name: n.name, at }); }
+      c.rq_id = null; c.rq_until = 0;
     } else {
       const ex = await t.get("SELECT * FROM expeditions WHERE user_id = ? AND status = 'active' ORDER BY id DESC LIMIT 1", [c.id]);
       c.ex_until = 0;
       if (!ex) continue;
       const kind = R.EXPEDITIONS[ex.kind] || R.EXPEDITIONS.zwiad;
-      const res = R.expeditionResult(kind, c.level, R.labBonus(c));
+      const res = R.expeditionResult(kind, c.level, R.labBonus(c) * R.lootMult(c, 'expLoot') * (c._expMult || 1));
       collectAt(at);
       const maxHp = R.shipStats(c).maxHp;
       c.hp = Math.max(1, Math.round(c.hp - res.dmg * maxHp)); c.hp_at = Math.max(c.hp_at, at);

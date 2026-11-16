@@ -1,3 +1,4 @@
+import { mods } from './progression.js';
 // Czyste reguły gry (bez bazy danych i HTTP) – łatwe do testowania i balansowania.
 export const SPEED = Math.max(0.1, Number(process.env.GAME_SPEED) || 1); // mnożnik tempa (tylko do testów)
 export const MIN = 60_000;
@@ -60,7 +61,7 @@ export function upgradeCost(def, lvl) {
 
 export const BOOST_BONUS = 0.5; // Rdzeń kwantowy: +50% wydobycia
 /** Stały mnożnik produkcji (bonusy korporacji ustawiane w u._prodBonus). */
-export const prodMult = (u) => 1 + (u._prodBonus || 0);
+export const prodMult = (u) => 1 + (u._prodBonus || 0) + mods(u).prod;
 const boostOn = (u, now) => !!now && (u.boost_until || 0) > now;
 /** Produkcja na minutę (z aktywnym Rdzeniem kwantowym, jeśli podano `now`). */
 export function production(u, now) {
@@ -68,8 +69,8 @@ export function production(u, now) {
   return { metal: 8 * u.b_mine * SPEED * m, crystal: 3 * u.b_mine * SPEED * m, energy: 5 * u.b_power * SPEED * m };
 }
 export function storageCap(u, now) {
-  const p = production(u, now);
-  return { metal: Math.floor(p.metal * STORAGE_MINUTES), crystal: Math.floor(p.crystal * STORAGE_MINUTES), energy: Math.floor(p.energy * STORAGE_MINUTES) };
+  const p = production(u, now), sm = STORAGE_MINUTES * (1 + mods(u).storage);
+  return { metal: Math.floor(p.metal * sm), crystal: Math.floor(p.crystal * sm), energy: Math.floor(p.energy * sm) };
 }
 /** Surowce czekające w magazynie wydobycia (do zebrania). Doładowanie liczone tylko w oknie jego trwania. */
 export function pending(u, now) {
@@ -81,16 +82,23 @@ export function pending(u, now) {
   return out;
 }
 
+/** Statystyki bazowe (moduły + poziom), bez klasy i technologii. */
+export function baseStats(u) {
+  return { maxHp: 80 + 40 * u.s_hull + 10 * u.level, atk: 8 + 6 * u.s_guns + u.level, def: 2 + 4 * u.s_shields };
+}
+/** Statystyki bojowe z klasą statku i technologiami: maxHp, atk, def + crit/dodge/shield (ułamki). */
 export function shipStats(u) {
+  const b = baseStats(u), m = mods(u);
   return {
-    maxHp: 80 + 40 * u.s_hull + 10 * u.level,
-    atk: 8 + 6 * u.s_guns + u.level,
-    def: 2 + 4 * u.s_shields,
+    maxHp: Math.round(b.maxHp * (1 + m.hp)), atk: Math.round(b.atk * (1 + m.atk)), def: Math.round(b.def * (1 + m.def)),
+    crit: m.crit, dodge: m.dodge, shield: m.shield,
   };
 }
 export function repairPerMin(u) {
-  return (0.02 + 0.01 * u.b_shipyard) * shipStats(u).maxHp * SPEED;
+  return (0.02 + 0.01 * u.b_shipyard) * shipStats(u).maxHp * SPEED * (1 + mods(u).repair);
 }
+/** Mnożniki łupów/XP z klasy i technologii. */
+export const lootMult = (u, kind) => 1 + (mods(u)[kind] || 0);
 export function currentHp(u, now) {
   const { maxHp } = shipStats(u);
   const mins = Math.max(0, (now - u.hp_at) / MIN);
@@ -131,16 +139,19 @@ const MISS = ['pudłuje – pocisk znika w pustce', 'trafia w tarczę odbitą od
 /** Symulacja bitwy. a strzela pierwszy. Max 12 rund. */
 export function simulate(a, d, rnd = Math.random) {
   const A = { ...a }, D = { ...d };
+  A.sh = Math.round((A.shield || 0) * A.maxHp); D.sh = Math.round((D.shield || 0) * D.maxHp); // tarcza pochłania pierwsze obrażenia
   const log = [];
   const pick = (arr) => arr[Math.floor(rnd() * arr.length)];
   const shoot = (s, t, round) => {
-    if (rnd() < 0.06) { log.push({ r: round, side: s === A ? 'a' : 'd', t: `${s.name} ${pick(MISS)}.` }); return; }
+    if (rnd() < 0.06 + (t.dodge || 0)) { log.push({ r: round, side: s === A ? 'a' : 'd', t: `${s.name} ${pick(MISS)}.` }); return; }
     let dmg = s.atk * (0.85 + rnd() * 0.3) - t.def * 0.5;
-    const crit = rnd() < 0.1;
+    const crit = rnd() < 0.1 + (s.crit || 0);
     if (crit) dmg *= 1.6;
     dmg = Math.max(1, Math.round(dmg));
-    t.hp = Math.max(0, t.hp - dmg);
-    log.push({ r: round, side: s === A ? 'a' : 'd', t: `${s.name} ${pick(HIT)}: −${dmg} HP${crit ? ' (KRYTYK!)' : ''}. ${t.name}: ${t.hp}/${t.maxHp}` });
+    const absorbed = Math.min(t.sh, dmg);
+    t.sh -= absorbed;
+    t.hp = Math.max(0, t.hp - (dmg - absorbed));
+    log.push({ r: round, side: s === A ? 'a' : 'd', t: `${s.name} ${pick(HIT)}: −${dmg} HP${crit ? ' (KRYTYK!)' : ''}${absorbed ? ` (tarcza pochłania ${absorbed})` : ''}. ${t.name}: ${t.hp}/${t.maxHp}` });
   };
   let round = 0;
   while (round < 12 && A.hp > 0 && D.hp > 0) {

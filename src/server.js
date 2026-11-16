@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { createDb } from './db.js';
 import * as R from './rules.js';
+import { mods } from './progression.js';
 import * as V from './views.js';
 import * as G from './game.js';
 import { GameError, fail } from './game.js';
@@ -25,6 +26,7 @@ import { adminTokenOk, purgeTestUsers, recordSeen, fingerprint, clientIp } from 
 import * as AD from './admin.js';
 import registerAdmin, { addFlag, flagIfLinked, activeAnnouncements, stats as adStats } from './features/admin.js';
 import registerMarket from './features/market.js';
+import registerFleet from './features/fleet.js';
 import registerReferral, { checkReferral, findInviter } from './features/referral.js';
 import * as RF from './referral.js';
 
@@ -384,9 +386,9 @@ function preBattle(u, now, energyCost) {
   if (now - u.last_battle_at < R.BATTLE_COOLDOWN_MS) fail('Działa się chłodzą – odczekaj kilka sekund.');
   if (hp < ship.maxHp * R.MIN_HP_RATIO) fail(`Statek zbyt uszkodzony (${hp}/${ship.maxHp} HP). Poczekaj na naprawę.`);
   if (u.energy < energyCost) fail(`Za mało energii w magazynie (potrzeba ⚡${energyCost}). Zbierz surowce.`);
-  return { name: u.username, hp, maxHp: ship.maxHp, atk: ship.atk, def: ship.def };
+  return { name: u.username, ...ship, hp };
 }
-function xpGain(u, base) { return Math.round(base * (1 + (u._xpBonus ?? (u.corp_id ? R.CORP_XP_BONUS : 0)))); }
+function xpGain(u, base) { return Math.round(base * (1 + (u._xpBonus ?? (u.corp_id ? R.CORP_XP_BONUS : 0)) + mods(u).xp)); }
 
 app.post('/bitwa/piraci/:tier', auth, action('/bitwa', async (t, u, now, req) => {
   const tier = R.PIRATES.find((p) => p.id === req.params.tier) || fail('Nieznany przeciwnik.');
@@ -395,7 +397,7 @@ app.post('/bitwa/piraci/:tier', auth, action('/bitwa', async (t, u, now, req) =>
   const enemy = R.pirate(tier, u.level);
   const sim = R.simulate(me, enemy);
   let reward = { xp: 3, metal: 0, crystal: 0 };
-  if (sim.aWon) reward = R.pirateReward(tier, u.level, R.labBonus(u));
+  if (sim.aWon) reward = R.pirateReward(tier, u.level, R.labBonus(u) * R.lootMult(u, 'pveLoot'));
   reward.xp = xpGain(u, reward.xp);
   const lv = R.addXp(u.level, u.xp, reward.xp);
   const hp = lv.levelsGained ? R.shipStats({ ...u, level: lv.level }).maxHp : Math.max(1, sim.aHp);
@@ -421,11 +423,11 @@ app.post('/bitwa/gracz/:id', auth, action('/bitwa', async (t, u, now, req) => {
   const me = preBattle(u, now, R.PVP_ENERGY);
   const ds = R.shipStats(d);
   // Obrońca walczy automatycznymi dronami w pełnej sprawności – jego statek nie traci HP.
-  const sim = R.simulate(me, { name: d.username, hp: ds.maxHp, maxHp: ds.maxHp, atk: ds.atk, def: ds.def });
+  const sim = R.simulate(me, { name: d.username, ...ds, hp: ds.maxHp });
   let reward = { xp: 4, metal: 0, crystal: 0 };
   if (sim.aWon) {
-    const capLoot = 150 + 75 * u.level;
-    reward = { xp: 20 + 6 * d.level, metal: Math.min(capLoot, Math.floor(d.metal * 0.1)), crystal: Math.min(capLoot, Math.floor(d.crystal * 0.1)) };
+    const lm = R.lootMult(u, 'pvpLoot'), capLoot = Math.round((150 + 75 * u.level) * lm);
+    reward = { xp: 20 + 6 * d.level, metal: Math.min(capLoot, Math.floor(d.metal * 0.1 * lm)), crystal: Math.min(capLoot, Math.floor(d.crystal * 0.1 * lm)) };
   }
   reward.xp = xpGain(u, Math.round(reward.xp * (sim.aWon ? R.labBonus(u) : 1)));
   const lv = R.addXp(u.level, u.xp, reward.xp);
@@ -477,7 +479,7 @@ app.get('/api/ranking', auth, async (req, res, next) => {
 
 // ---------- moduły funkcji ----------
 const DEV = process.env.DEV_HOOKS === '1' && !process.env.RENDER;
-const ctx = { dev: DEV, baseUrl, xpGain, preBattle, settledHooks, devHooks, app, db, auth, page, action, respond, wantsJson, materialize, payable, costText };
+const ctx = { onSettled, dev: DEV, baseUrl, xpGain, preBattle, settledHooks, devHooks, app, db, auth, page, action, respond, wantsJson, materialize, payable, costText };
 registerMissions(ctx);
 registerExpeditions(ctx);
 registerCorp(ctx);
@@ -487,6 +489,7 @@ registerSeason(ctx);
 registerArena(ctx);
 registerAchievements(ctx);
 registerMarket(ctx);
+registerFleet(ctx);
 registerReferral(ctx);
 registerAdmin(ctx);
 registerPush(ctx);
@@ -512,6 +515,7 @@ if (process.env.DEV_HOOKS === '1' && !process.env.RENDER) {
       protected_until = protected_until - ?, login_day = CASE WHEN login_day > 0 THEN login_day - ? ELSE 0 END WHERE id = ?`, [ms, ms, ms, ms, days, u.id]);
     await t.run(`UPDATE users SET bq_until = CASE WHEN bq_until > 0 THEN bq_until - ? ELSE 0 END, mq_until = CASE WHEN mq_until > 0 THEN mq_until - ? ELSE 0 END,
       ex_until = CASE WHEN ex_until > 0 THEN ex_until - ? ELSE 0 END, boost_until = CASE WHEN boost_until > 0 THEN boost_until - ? ELSE 0 END WHERE id = ?`, [ms, ms, ms, ms, u.id]);
+    await t.run(`UPDATE users SET rq_until = CASE WHEN rq_until > 0 THEN rq_until - ? ELSE 0 END, class_changed_at = CASE WHEN class_changed_at > 0 THEN class_changed_at - ? ELSE 0 END WHERE id = ?`, [ms, ms, u.id]);
     await t.run("UPDATE expeditions SET started_at = started_at - ?, return_at = return_at - ? WHERE user_id = ? AND status = 'active'", [ms, ms, u.id]);
     for (const h of devHooks) await h(t, u, ms);
     return { msg: 'Przewinięto czas.' };

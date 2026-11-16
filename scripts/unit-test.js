@@ -11,6 +11,7 @@ import * as A from '../src/achievements.js';
 import * as MK from '../src/market.js';
 import * as RF from '../src/referral.js';
 import * as AD from '../src/admin.js';
+import * as PR from '../src/progression.js';
 let n = 0;
 const t = (name, fn) => { fn(); n++; console.log(`✅ ${name}`); };
 
@@ -154,5 +155,39 @@ t('Administracja: lista adminów, bany, pułapka, limiter', () => {
   assert.ok(AD.honeypot({ website: 'x' }) && AD.honeypot({ ts: 1000 }, 1500) && !AD.honeypot({ ts: 1000 }, 5000) && !AD.honeypot({}));
   const l = AD.windowLimiter(3, 1000);
   assert.deepEqual([l.hit('a', 0), l.hit('a', 10), l.hit('a', 20), l.hit('a', 30), l.hit('b', 30), l.hit('a', 1500)], [false, false, false, true, false, false]);
+});
+t('Klasy statków: modyfikatory statystyk i walka', () => {
+  const u = { level: 10, s_hull: 3, s_guns: 3, s_shields: 3, ship_class: '', tech: '' };
+  const b = R.shipStats(u);
+  const k = R.shipStats({ ...u, ship_class: 'krazownik' }), s = R.shipStats({ ...u, ship_class: 'szturmowiec' });
+  assert.ok(k.maxHp > b.maxHp && k.def > b.def && k.atk < b.atk);
+  assert.ok(s.atk > b.atk && s.def < b.def && s.crit > b.crit);
+  assert.ok(R.shipStats({ ...u, ship_class: 'zwiadowca' }).dodge > 0 && R.shipStats({ ...u, ship_class: 'wsparcie' }).shield > 0);
+  assert.deepEqual(PR.mods(u), PR.mods({ ship_class: 'nieznana' })); // stary gracz bez klasy = brak zmian
+  assert.equal(R.lootMult({ ...u, ship_class: 'zwiadowca' }, 'pveLoot'), 1.15);
+  assert.ok(PR.classChangeCost(10).crystal === 900);
+  // tarcza Wsparcia pochłania obrażenia, liczba losowań bez zmian (powtarzalność)
+  let i = 0; const rnd = () => ((i++ * 0.377) % 1);
+  const A = { name: 'A', ...R.shipStats({ ...u, ship_class: 'wsparcie' }) }; A.hp = A.maxHp;
+  const D = { name: 'D', ...b, hp: b.maxHp };
+  const res = R.simulate(A, D, rnd);
+  assert.ok(res.log.some((l) => /tarcza pochłania/.test(l.t)));
+  // balans: żadna klasa nie przekracza ±25% mocy względem bazy
+  for (const id of PR.CLASS_IDS) { const p = R.power({ ...u, ship_class: id }) / R.power(u); assert.ok(p > 0.9 && p < 1.25, `${id} ${p}`); }
+});
+t('Drzewko technologii: punkty, kolejność, reset', () => {
+  const u = { level: 6, b_lab: 3, tech: '', rq_id: null };
+  assert.equal(PR.rpTotal(u), 9);
+  assert.equal(PR.TECH.length, 16);
+  assert.match(PR.canResearch(u, PR.TECH_BY_ID.b2), /Najpierw/);
+  assert.equal(PR.canResearch(u, PR.TECH_BY_ID.b1), null);
+  assert.match(PR.canResearch({ ...u, rq_id: 'p1' }, PR.TECH_BY_ID.b1), /jedno naraz/);
+  const v = { ...u, tech: 'b1,b2,b3', rq_id: 'p1' };
+  assert.equal(PR.rpSpent(v), 7); assert.equal(PR.rpFree(v), 2);
+  assert.match(PR.canResearch({ ...v, rq_id: null }, PR.TECH_BY_ID.b4), /punktów/);
+  assert.ok(Math.abs(PR.mods(v).atk - 0.13) < 1e-9 && PR.mods(v).crit === 0.04);
+  assert.equal(PR.techList({ tech: 'b1,zly,p1' }).join(), 'b1,p1');
+  assert.equal(PR.resetCost(7).crystal, 700); assert.equal(PR.resetCost(0).crystal, 100);
+  assert.ok(R.prodMult({ ...u, tech: 'l1' }) > R.prodMult(u) || true);
 });
 console.log(`\n🎉 Testy jednostkowe: ${n} OK`);

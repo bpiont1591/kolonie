@@ -538,6 +538,72 @@ check(r.status === 200 && r.data.includes('Zagraj za darmo') && r.data.includes(
 r = await new Client('anon').get('/manifest.webmanifest', false);
 check(r.status === 200, 'Manifest PWA');
 
+// ---------- v6 etap 1: klasy statków i drzewko technologii ----------
+{
+  const N = new Client(`Nowy_${suffix}`);
+  await N.post('/rejestracja', { username: N.name, password: 'nowy1234' });
+  r = await N.post('/statek/klasa/krazownik');
+  check(!r.data.ok && /samouczek/i.test(r.data.msg), 'Klasa: zablokowana w trakcie samouczka', r.data.msg);
+  r = await E.get('/statek', false);
+  check(r.data.includes('Wybierz klasę statku'), 'Klasa: zaproszenie do wyboru po samouczku');
+  let k = (await E.get('/api/klasa')).data;
+  const base = k.stats;
+  check(k.ok && k.first && k.current === '' && k.classes.length === 4, 'Klasa: 4 klasy, pierwszy wybór darmowy');
+  const cr0 = (await E.get('/api/stan')).data.stock.crystal;
+  r = await E.post('/statek/klasa/krazownik');
+  k = (await E.get('/api/klasa')).data;
+  const cr1 = (await E.get('/api/stan')).data.stock.crystal;
+  check(r.data.ok && k.current === 'krazownik' && cr1 >= cr0 && k.stats.maxHp > base.maxHp && k.stats.def > base.def && k.stats.atk < base.atk,
+    'Klasa: Krążownik – więcej HP i obrony, mniej ataku, za darmo', `HP ${base.maxHp}→${k.stats.maxHp}, obrona ${base.def}→${k.stats.def}, atak ${base.atk}→${k.stats.atk}`);
+  r = await E.post('/statek/klasa/szturmowiec');
+  check(!r.data.ok && /zmiana klasy możliwa za/.test(r.data.msg), 'Klasa: zmiana blokowana przez 24 h', r.data.msg);
+  r = await E.get('/statek/klasa', false);
+  check(r.data.includes('cls_krazownik.webp') && r.data.includes('Twoja klasa'), 'Klasa: strona wyboru z portretami');
+  st = (await E.get('/api/stan')).data;
+  let bd = (await E.get('/api/badania')).data;
+  check(bd.ok && bd.rpTotal >= st.user.level - 1 && bd.rpFree === bd.rpTotal, 'Badania: punkty z poziomu i laboratorium', `${bd.rpFree}/${bd.rpTotal} PB`);
+  r = await E.post('/badania/start/b2');
+  check(!r.data.ok, 'Badania: technologia II poziomu wymaga poprzedniej', r.data.msg);
+  if (bd.rpFree >= 1) {
+    r = await E.post('/badania/start/b1');
+    check(r.data.ok && r.data.tech === 'b1' && r.data.seconds > 0, 'Badania: start (kolejka jak budowa)', r.data.msg);
+    r = await E.post('/badania/start/p1');
+    check(!r.data.ok, 'Badania: tylko jedno badanie naraz', r.data.msg);
+    const atkBefore = (await E.get('/api/klasa')).data.stats.atk;
+    r = await E.post('/badania/przyspiesz');
+    bd = (await E.get('/api/badania')).data;
+    const atkAfter = (await E.get('/api/klasa')).data.stats.atk;
+    check(r.data.ok && bd.tech.includes('b1') && !bd.rq && atkAfter > atkBefore, 'Badania: przyspieszenie za kryształy, premia działa', `atak ${atkBefore}→${atkAfter}`);
+    r = await E.post('/badania/reset');
+    bd = (await E.get('/api/badania')).data;
+    check(r.data.ok ? bd.tech.length === 0 && bd.rpFree === bd.rpTotal : /Reset kosztuje/.test(r.data.msg), 'Badania: reset za kryształy zwraca punkty', r.data.msg);
+  }
+  r = await E.get('/badania', false);
+  check(r.data.includes('Drzewko technologii') && ['Uzbrojenie', 'Pancerz', 'Logistyka', 'Taktyka'].every((x) => r.data.includes(x)), 'Badania: 4 gałęzie drzewka');
+  if (DEV) {
+    await E.post('/api/dev/poziom', { level: 12 }); await E.post('/api/dev/surowce');
+    bd = (await E.get('/api/badania')).data;
+    check(bd.rpFree >= 11, 'Badania: więcej PB z poziomem', `${bd.rpFree} PB`);
+    r = await E.post('/badania/start/l1');
+    const sec = r.data.seconds;
+    await E.post('/api/dev/przewin', { minutes: Math.ceil(sec / 60) + 1 });
+    bd = (await E.get('/api/badania')).data;
+    check(bd.tech.includes('l1') && !bd.rq && bd.mods.prod > 0, 'Badania: ukończenie w tle po czasie (leniwe rozliczenie)', `wydobycie +${Math.round(bd.mods.prod * 100)}%`);
+    r = await E.post('/badania/start/l2'); await E.post('/api/dev/przewin', { minutes: 25 });
+    bd = (await E.get('/api/badania')).data;
+    check(bd.tech.includes('l2'), 'Badania: II poziom gałęzi po I');
+    await E.post('/api/dev/przewin', { minutes: 24 * 60 + 1 });
+    const crB = (await E.get('/api/stan')).data.stock.crystal;
+    r = await E.post('/statek/klasa/zwiadowca');
+    const crA = (await E.get('/api/stan')).data.stock.crystal;
+    check(r.data.ok && crB - crA === 300 + 60 * 12, 'Klasa: zmiana po 24 h za kryształy (300 + 60×poziom)', r.data.msg);
+    const rpBefore = (await E.get('/api/badania')).data.rpFree;
+    r = await E.post('/badania/reset');
+    bd = (await E.get('/api/badania')).data;
+    check(r.data.ok && r.data.refunded >= 3 && bd.rpFree === rpBefore + r.data.refunded && bd.mods.prod === 0, 'Badania: reset zwraca PB i zdejmuje premie', r.data.msg);
+  }
+}
+
 // ---------- v5 etap 5: panel admina, bany, ogłoszenia, ochrona przed botami ----------
 r = await M2.get('/admin', false);
 check(r.status === 404, 'Admin: panel ukryty przed zwykłym graczem');

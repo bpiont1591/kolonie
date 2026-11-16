@@ -12,7 +12,7 @@ export default function registerTutorial({ app, auth, action }) {
     await t.run('UPDATE users SET tut_step = ?, tut_done = 0 WHERE id = ?', [next, u.id]);
     const ns = TUT.STEPS[next - 1];
     return next > TUT.COUNT
-      ? { msg: `Misja startowa ukończona! ${G.rewardText(rw)} Powodzenia, komandorze!`, redirect: '/kolonia', data: { step: next, finished: true, reward: rw } }
+      ? { msg: `Misja startowa ukończona! ${G.rewardText(rw)} Teraz wybierz klasę swojego statku!`, redirect: '/statek/klasa', data: { step: next, finished: true, reward: rw } }
       : { msg: `Krok ${s.n}/${TUT.COUNT} zaliczony: ${G.rewardText(rw)}`, redirect: ns.page, data: { step: next, reward: rw } };
   }));
   app.post('/samouczek/pomin', auth, action('/kolonia', async (t, u) => {
