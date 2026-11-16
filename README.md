@@ -24,6 +24,7 @@ Zmienne środowiskowe:
 | `PORT` | `3100` | port serwera |
 | `DB_FILE` | `data/kolonie.db` | plik bazy SQLite |
 | `GAME_SPEED` | `1` | mnożnik tempa produkcji i napraw (np. `20` do testów) |
+| `DATABASE_URL` | – | adres Postgresa (Neon); bez niego używany jest SQLite |
 | `COOKIE_SECURE` | – | ustaw `1` za HTTPS, by ciasteczko sesji miało flagę `Secure` |
 
 Inne komendy:
@@ -81,13 +82,19 @@ scripts/smoke-test.js – test end-to-end przez HTTP
   (np. `curl -H 'Accept: application/json' -X POST .../kolonia/zbierz`). Dodatkowo `GET /api/stan`
   i `GET /api/ranking?tab=gracze|pvp|korporacje`.
 
-### Przejście na Postgres / Neon
+### Postgres / Neon
 
-Cała gra korzysta tylko z `db.get/all/run/tx` i SQL z parametrami `?`. Aby przejść na Postgres:
-1. napisz `createPgDb(url)` z tym samym interfejsem (pakiet `pg`, zamiana `?` → `$1..$n`,
-   `tx` = `BEGIN … COMMIT` na jednym kliencie z puli; `run` zwraca `lastId` przez `RETURNING id`),
-2. w schemacie: `INTEGER PRIMARY KEY AUTOINCREMENT` → `BIGSERIAL PRIMARY KEY`, znaczniki czasu → `BIGINT`,
-3. w zapytaniach PvP zamień skalarne `MAX(0, x)` na `GREATEST(0, x)`.
+Gdy ustawiona jest zmienna `DATABASE_URL`, gra używa Postgresa (np. Neon) przez pakiet `pg`
+i sama tworzy schemat przy starcie (`CREATE TABLE IF NOT EXISTS`). Bez `DATABASE_URL` używa lokalnego SQLite.
+Adapter zamienia parametry `?` na `$1..$n`, a `INSERT` zwraca id przez `RETURNING id`.
+Transakcje są serializowane w obrębie procesu – przy wielu instancjach trzeba dodać `SELECT … FOR UPDATE`.
+
+```bash
+DATABASE_URL='postgresql://…' npm start
+```
+
+Na Renderze: build `npm ci --omit=dev`, start `npm start`, zmienne `DATABASE_URL`, `NODE_VERSION=24`
+(port Render podaje sam w `PORT`). Zdrowie serwisu: `GET /healthz`.
 
 ## Znane ograniczenia prototypu
 
