@@ -69,6 +69,7 @@ app.use((req, res, next) => {
   next();
 });
 app.get('/sw.js', (req, res) => { res.set('Cache-Control', 'no-cache'); res.sendFile(path.join(ROOT, 'public', 'sw.js')); });
+for (const d of ['img', 'fonts']) app.use(`/${d}`, express.static(path.join(ROOT, 'public', d), { maxAge: '30d', immutable: true }));
 app.use(express.static(path.join(ROOT, 'public'), { maxAge: '1h' }));
 app.use(express.urlencoded({ extended: false, limit: '10kb' }));
 app.use(express.json({ limit: '10kb' }));
@@ -144,7 +145,11 @@ app.get('/', page(async (req, now) => {
   if (req.user) return '<meta http-equiv="refresh" content="0;url=/kolonia">';
   const players = (await db.get('SELECT COUNT(*) AS n FROM users')).n;
   const online = (await db.get('SELECT COUNT(*) AS n FROM users WHERE collected_at > ? OR last_battle_at > ?', [now - 3600_000, now - 3600_000])).n;
-  return V.landing({ players, online, flash: req.flash });
+  const battles24 = (await db.get('SELECT COUNT(*) AS n FROM battles WHERE created_at > ?', [now - 86400_000])).n;
+  const top = await db.all(`SELECT u.username, u.level, c.tag FROM users u LEFT JOIN corps c ON c.id = u.corp_id
+    ORDER BY u.level DESC, u.xp DESC, u.id ASC LIMIT 5`);
+  const baseUrl = process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || `${req.protocol}://${req.get('host')}`;
+  return V.landing({ players, online, battles24, top, flash: req.flash, baseUrl });
 }));
 
 const NAME_RE = /^[\p{L}\p{N}_-]{3,16}$/u;

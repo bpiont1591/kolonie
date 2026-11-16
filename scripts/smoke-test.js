@@ -113,7 +113,7 @@ for (const p of ['/kolonia', '/statek', '/bitwa', '/korporacja', '/ranking', '/r
   check(r.status === 200 && r.data.includes('</html>'), `Strona ${p}`);
 }
 r = await new Client('anon').get('/', false);
-check(r.status === 200 && r.data.includes('KOLONIE'), 'Strona startowa');
+check(r.status === 200 && r.data.includes('Zagraj za darmo') && r.data.includes('og:image'), 'Strona startowa');
 r = await new Client('anon').get('/manifest.webmanifest', false);
 check(r.status === 200, 'Manifest PWA');
 

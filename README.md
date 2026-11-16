@@ -62,6 +62,16 @@ i bitwę PvP, zakłada korporację, dołącza drugiego gracza i sprawdza wszystk
   Gdy założyciel odejdzie, przywództwo przejmuje najsilniejszy członek (pusta korporacja znika).
 - **Ranking:** gracze wg poziomu i XP, PvP wg punktów, korporacje wg siły (Σ poziom×100 + pkt PvP).
 
+## Grafika i zasoby
+
+- Grafiki (key art, logo, statek, budynki, piraci, surowce, tło bitwy) są autorskie, wygenerowane dla tego projektu.
+  Źródła w wysokiej rozdzielczości: `art-src/` (+ `art-src/gen/`).
+- `python3 scripts/build-assets.py` tworzy z nich lekkie wersje WebP w `public/img/` (łącznie ok. 380 KB),
+  ikony PWA/favicon (`public/icon-*.png`) i obraz do udostępniania `public/img/og.jpg` (1200×630).
+- Font nagłówków: Rajdhani (SIL Open Font License), podzbiór łaciński z polskimi znakami w `public/fonts/`.
+- Strona startowa ma meta tagi Open Graph/Twitter, statystyki na żywo z bazy, podgląd rankingu, FAQ
+  i podpowiedź instalacji PWA.
+
 ## Architektura
 
 ```

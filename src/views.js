@@ -9,7 +9,7 @@ const ago = (ts, now) => {
   if (s < 86400) return `${Math.floor(s / 3600)} h temu`;
   return `${Math.floor(s / 86400)} d temu`;
 };
-const costHtml = (c) => R.RES_KEYS.filter((k) => c[k] > 0).map((k) => `<span class="cost">${R.RESOURCES[k].icon} ${fmt(c[k])}</span>`).join(' ');
+const costHtml = (c) => R.RES_KEYS.filter((k) => c[k] > 0).map((k) => `<span class="cost">${resIcon(k, 14)} ${fmt(c[k])}</span>`).join(' ');
 const canPay = (have, c) => R.RES_KEYS.every((k) => have[k] >= c[k]);
 
 /** Stan gracza wyliczony na chwilę `now` (serwer jest jedynym źródłem prawdy). */
@@ -31,12 +31,18 @@ function hpBar(st) {
     <i style="width:${pct}%"></i><span>🛡️ <b data-hp-text>${st.ship.hp}</b>/${st.ship.maxHp} HP</span></div>`;
 }
 
-export function layout({ title, user, st, body, flash, active = '' }) {
+const V = 4; // wersja zasobów statycznych (cache-busting)
+export const img = (name, alt = '', cls = '', size = 64, eager = false) =>
+  `<img src="/img/${name}.webp?v=${V}" alt="${esc(alt)}" class="${cls}" width="${size}" height="${size}" decoding="async"${eager ? '' : ' loading="lazy"'}>`;
+export const resIcon = (k, size = 18) => `<img src="/img/r_${k}.webp?v=${V}" alt="${R.RESOURCES[k].name}" title="${R.RESOURCES[k].name}" class="ri" width="${size}" height="${size}">`;
+const SITE_DESC = 'Kolonie – darmowa kosmiczna gra MMORPG w przeglądarce. Zbuduj kolonię na obcej planecie, ulepszaj statek, walcz z piratami i graczami, dołącz do korporacji. Bez instalacji, na telefonie i komputerze.';
+
+export function layout({ title, user, st, body, flash, active = '', head = '', bodyClass = '', baseUrl = '' }) {
   const top = user ? `
   <header class="top">
-    <a class="brand" href="/kolonia"><span class="logo">🪐</span><span>KOLONIE</span></a>
+    <a class="brand" href="/kolonia"><img src="/img/logo.webp?v=${V}" alt="Kolonie" width="96" height="26"></a>
     <div class="res">
-      ${R.RES_KEYS.map((k) => `<span title="${R.RESOURCES[k].name}">${R.RESOURCES[k].icon} <b>${fmt(st.stock[k])}</b></span>`).join('')}
+      ${R.RES_KEYS.map((k) => `<span>${resIcon(k)}<b>${fmt(st.stock[k])}</b></span>`).join('')}
     </div>
     <div class="who"><span class="lvl">Lv ${user.level}</span> ${esc(user.username)}</div>
   </header>` : '';
@@ -47,57 +53,136 @@ export function layout({ title, user, st, body, flash, active = '' }) {
   const nav = user ? `<nav class="tabs">${tabs.map(([id, href, ic, label]) =>
     `<a href="${href}" class="${active === id ? 'on' : ''}"><span>${ic}</span>${label}</a>`).join('')}</nav>` : '';
   const fl = flash ? `<div class="flash ${flash.ok ? 'ok' : 'err'}" role="status">${esc(flash.msg)}</div>` : '';
+  const fullTitle = title.includes('Kolonie') ? title : `${title} · Kolonie`;
   return `<!doctype html><html lang="pl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#070b1a"><meta name="description" content="Kolonie – kosmiczna gra MMORPG w przeglądarce">
-<link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="/icon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="/icon-192.png"><link rel="stylesheet" href="/style.css?v=3">
-<title>${esc(title)} · Kolonie</title></head>
-<body class="${user ? 'in' : 'out'}"><div class="stars"></div>${top}<main>${fl}${body}</main>${nav}
-<script src="/app.js?v=3" defer></script></body></html>`;
+<meta name="theme-color" content="#050918"><meta name="description" content="${esc(SITE_DESC)}">
+<meta name="color-scheme" content="dark">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon-32.png?v=${V}" type="image/png" sizes="32x32"><link rel="icon" href="/icon-192.png?v=${V}" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/icon-180.png?v=${V}"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Kolonie">
+<link rel="preload" href="/fonts/rajdhani-bold.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/style.css?v=${V}">
+${head}
+<title>${esc(fullTitle)}</title></head>
+<body class="${user ? 'in' : 'out'} ${bodyClass}"><div class="stars"></div>${top}<main>${fl}${body}</main>${nav}
+<script src="/app.js?v=${V}" defer></script></body></html>`;
 }
 
-export function landing({ online, players, flash }) {
-  return layout({ title: 'Witaj, Komandorze', flash, body: `
-  <section class="hero">
-    <div class="planet big"></div>
-    <h1>KOLONIE</h1>
-    <p class="tag">Zbuduj kolonię na obcej planecie. Uzbrój statek. Zostań legendą sektora.</p>
-    <p class="muted small">${fmt(players)} kolonistów · ${fmt(online)} aktywnych w ostatniej godzinie</p>
+const FEATURES = [
+  ['b_mine', 'Buduj kolonię', 'Kopalnie, reaktory i laboratoria pracują dla Ciebie nawet wtedy, gdy nie grasz. Wracaj po surowce i rozbudowuj bazę.'],
+  ['ship', 'Ulepszaj statek', 'Wzmacniaj kadłub, działa plazmowe i tarcze deflektorowe. Każdy poziom to realna przewaga w walce.'],
+  ['p_krazownik', 'Walcz z piratami i graczami', 'Szybkie bitwy na kilka sekund: poluj na piratów rubieży albo rzuć wyzwanie innym komandorom i zabierz im łupy.'],
+  ['b_shipyard', 'Dołącz do korporacji', 'Załóż korporację z przyjaciółmi, zdobywajcie bonusy XP i walczcie razem o szczyt rankingu.'],
+];
+const FAQ = [
+  ['Czy gra jest darmowa?', 'Tak. Kolonie są w pełni darmowe i działają w przeglądarce – nie trzeba nic pobierać ani podawać karty.'],
+  ['Na czym mogę grać?', 'Na każdym telefonie, tablecie i komputerze z nowoczesną przeglądarką. Grę możesz też zainstalować jak aplikację na ekranie głównym.'],
+  ['Ile czasu trzeba poświęcić?', 'Wystarczy kilka minut dziennie. Kolonia produkuje surowce sama, a magazyn mieści 2 godziny wydobycia – wpadaj, zbieraj i rozbudowuj.'],
+  ['Czy ktoś może mnie okraść?', 'Inni gracze mogą zaatakować Twoją kolonię i zabrać 10% metalu i kryształów, ale po ataku dostajesz 15 minut ochrony. Silniejsi gracze nie mogą atakować dużo słabszych.'],
+  ['Co daje korporacja?', 'Członkowie korporacji dostają +5% XP z bitew i wspólnie rywalizują w rankingu korporacji.'],
+];
+
+export function landing({ online, players, battles24, top, flash, baseUrl }) {
+  const url = baseUrl || '';
+  const title = 'Kolonie – darmowa kosmiczna gra MMORPG w przeglądarce';
+  const head = `<link rel="canonical" href="${esc(url)}/">
+<meta property="og:type" content="website"><meta property="og:site_name" content="Kolonie">
+<meta property="og:title" content="${esc(title)}"><meta property="og:description" content="${esc(SITE_DESC)}">
+<meta property="og:url" content="${esc(url)}/"><meta property="og:locale" content="pl_PL">
+<meta property="og:image" content="${esc(url)}/img/og.jpg?v=${V}"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Kolonie – zbuduj kolonię i podbij galaktykę">
+<meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="${esc(title)}">
+<meta name="twitter:description" content="${esc(SITE_DESC)}"><meta name="twitter:image" content="${esc(url)}/img/og.jpg?v=${V}">
+<link rel="preload" href="/img/hero.webp?v=${V}" as="image" fetchpriority="high">`;
+  const stat = (n, label) => `<div class="stat"><b>${fmt(n)}</b><span>${label}</span></div>`;
+  const pirates = R.PIRATES.map((p) => `<figure class="pirate-card">${img('p_' + p.id, p.name, '', 160)}
+    <figcaption><b>${p.name}</b><small>${p.minLvl > 1 ? `od poziomu ${p.minLvl}` : 'dla każdego'}</small></figcaption></figure>`).join('');
+  const rank = top.length ? top.map((r, i) => `<li><span class="pos">${i + 1}</span><b>${esc(r.username)}</b>${r.tag ? ` <span class="corp">[${esc(r.tag)}]</span>` : ''}<span class="grow"></span><span class="lvl">Lv ${r.level}</span></li>`).join('')
+    : '<li class="muted">Ranking czeka na pierwszego komandora – może to będziesz Ty?</li>';
+  return layout({ title, flash, head, bodyClass: 'landing', baseUrl, body: `
+  <section class="hero-full">
+    <div class="hero-bg" aria-hidden="true"></div>
+    <div class="hero-inner">
+      <img class="hero-logo" src="/img/logo.webp?v=${V}" alt="Kolonie" width="640" height="177" fetchpriority="high">
+      <h1>Zbuduj kolonię.<br><span>Podbij galaktykę.</span></h1>
+      <p class="lead">Darmowa kosmiczna gra MMORPG w przeglądarce. Rozbuduj bazę na obcej planecie, uzbrój statek i walcz o sławę w sektorze.</p>
+      <a class="btn cta" href="#start">🚀 Zagraj za darmo</a>
+      <a class="hero-login" href="#logowanie">Mam już konto – zaloguj się</a>
+      <div class="hero-stats">${stat(players, 'kolonistów')}${stat(online, 'aktywnych (1 h)')}${stat(battles24, 'bitew (24 h)')}</div>
+    </div>
+    <a class="scroll-hint" href="#o-grze" aria-label="Przewiń w dół">⌄</a>
   </section>
-  <section class="card">
-    <h2>Nowa kolonia</h2>
+
+  <section id="o-grze" class="features">
+    <h2 class="section-title">Twoja kolonia. Twoje zasady.</h2>
+    ${FEATURES.map(([im, h, t]) => `<article class="feature">${img(im, h, '', 320)}<div><h3>${h}</h3><p>${t}</p></div></article>`).join('')}
+  </section>
+
+  <section class="battle-teaser">
+    <div class="bt-bg" aria-hidden="true"></div>
+    <div class="bt-inner">
+      <h2 class="section-title">Bitwy w kilka sekund</h2>
+      <p>Każde starcie to szybki raport: salwy plazmowe, torpedy jonowe, trafienia krytyczne. Zwycięstwo daje XP, metal i kryształy.</p>
+      <div class="pirates">${pirates}</div>
+    </div>
+  </section>
+
+  <section class="card rank-preview">
+    <h2 class="section-title">🏆 Najlepsi komandorzy</h2>
+    <ol class="mini-rank">${rank}</ol>
+  </section>
+
+  <section id="start" class="card auth">
+    <h2 class="section-title">Załóż kolonię – za darmo</h2>
+    <p class="muted small">Wystarczy nazwa i hasło. Żadnych maili, żadnej instalacji.</p>
     <form method="post" action="/rejestracja" class="form">
-      <input name="username" placeholder="Nazwa komandora (3–16 znaków)" minlength="3" maxlength="16" required autocomplete="username">
-      <input name="password" type="password" placeholder="Hasło (min. 6 znaków)" minlength="6" required autocomplete="new-password">
-      <button class="btn primary">🚀 Wyląduj na planecie</button>
+      <input name="username" placeholder="Nazwa komandora (3–16 znaków)" minlength="3" maxlength="16" required autocomplete="username" aria-label="Nazwa komandora">
+      <input name="password" type="password" placeholder="Hasło (min. 6 znaków)" minlength="6" required autocomplete="new-password" aria-label="Hasło">
+      <button class="btn cta wide">🚀 Wyląduj na planecie</button>
     </form>
   </section>
-  <section class="card">
-    <h2>Mam już kolonię</h2>
+  <section id="logowanie" class="card auth">
+    <h3>Masz już kolonię?</h3>
     <form method="post" action="/logowanie" class="form">
-      <input name="username" placeholder="Nazwa komandora" required autocomplete="username">
-      <input name="password" type="password" placeholder="Hasło" required autocomplete="current-password">
-      <button class="btn">🔑 Zaloguj</button>
+      <input name="username" placeholder="Nazwa komandora" required autocomplete="username" aria-label="Nazwa komandora">
+      <input name="password" type="password" placeholder="Hasło" required autocomplete="current-password" aria-label="Hasło">
+      <button class="btn wide">🔑 Zaloguj</button>
     </form>
   </section>
-  <section class="card info">
-    <h3>Jak grać?</h3>
-    <ul>
-      <li>⛏️ Kolonia sama wydobywa surowce – wracaj i <b>zbieraj</b> je z magazynu.</li>
-      <li>🏗️ Rozbudowuj budynki, by produkować więcej.</li>
-      <li>🚀 Ulepszaj kadłub, działa i tarcze swojego statku.</li>
-      <li>⚔️ Walcz z piratami i innymi graczami – szybkie bitwy, prawdziwe łupy.</li>
-      <li>🛰️ Dołącz do korporacji i wspinaj się w rankingu.</li>
+
+  <section class="card install">
+    <h3>📲 Zainstaluj jak aplikację</h3>
+    <p class="small">Kolonie działają jak aplikacja – pełny ekran i ikona na ekranie głównym, bez sklepu.</p>
+    <button class="btn primary wide" id="install-btn" hidden>⬇️ Zainstaluj Kolonie</button>
+    <ul class="small muted">
+      <li><b>Android (Chrome):</b> menu ⋮ → „Zainstaluj aplikację”.</li>
+      <li><b>iPhone (Safari):</b> przycisk Udostępnij → „Do ekranu początkowego”.</li>
     </ul>
-  </section>` });
+  </section>
+
+  <section class="faq">
+    <h2 class="section-title">Najczęstsze pytania</h2>
+    ${FAQ.map(([q, a]) => `<details class="card"><summary>${q}</summary><p>${a}</p></details>`).join('')}
+  </section>
+
+  <section class="final-cta">
+    <h2>Galaktyka czeka, Komandorze.</h2>
+    <a class="btn cta" href="#start">🚀 Zagraj za darmo</a>
+  </section>
+
+  <footer class="footer">
+    <img src="/img/logo.webp?v=${V}" alt="Kolonie" width="140" height="39" loading="lazy">
+    <p>© ${new Date().getFullYear()} Kolonie · darmowa gra przeglądarkowa sci-fi</p>
+    <p><a href="#o-grze">O grze</a> · <a href="#start">Rejestracja</a> · <a href="#logowanie">Logowanie</a></p>
+  </footer>` });
 }
 
 export function colony({ user, st, flash }) {
   const have = { metal: st.stock.metal + st.pending.metal, crystal: st.stock.crystal + st.pending.crystal, energy: st.stock.energy + st.pending.energy };
   const xpPct = Math.round((user.xp / st.xpNeed) * 100);
   const pend = R.RES_KEYS.map((k) => `<div class="pend">
-      <span class="ic">${R.RESOURCES[k].icon}</span>
+      ${resIcon(k, 40)}
       <b data-live-res data-v="${st.pending[k]}" data-rate="${(st.rates[k] / 60).toFixed(4)}" data-cap="${st.cap[k]}">${fmt(st.pending[k])}</b>
       <small>+${fmt(st.rates[k] * 60)}/h · maks. ${fmt(st.cap[k])}</small></div>`).join('');
   const blds = Object.entries(R.BUILDINGS).map(([id, b]) => {
@@ -110,7 +195,7 @@ export function colony({ user, st, flash }) {
     if (id === 'shipyard') effect = `Moduły do poz. ${lvl * 2} · naprawa ${2 + lvl}%/min`;
     if (id === 'lab') effect = `Bonus bitewny +${(lvl - 1) * 10}%`;
     return `<div class="item">
-      <div class="ic big">${b.icon}</div>
+      ${img('b_' + id, b.name, 'thumb', 64)}
       <div class="grow"><div class="row"><b>${b.name}</b><span class="lvl">poz. ${lvl}</span></div>
         <div class="muted small">${b.desc}</div><div class="eff">${effect}</div>
         <div class="costs">${costHtml(c)}</div></div>
@@ -118,8 +203,7 @@ export function colony({ user, st, flash }) {
     </div>`;
   }).join('');
   return layout({ title: 'Kolonia', user, st, flash, active: 'kolonia', body: `
-  <section class="card colony">
-    <div class="planet"></div>
+  <section class="card colony banner" style="--bg:url('/img/hero.webp?v=${V}')">
     <div class="grow">
       <div class="muted small">Planeta</div><h2>${esc(user.planet)}</h2>
       <div class="muted small">Kolonia komandora <b>${esc(user.username)}</b></div>
@@ -134,17 +218,6 @@ export function colony({ user, st, flash }) {
   <section class="card"><h3>Budynki</h3><p class="muted small">Ulepszenie automatycznie zbiera surowce z magazynu wydobycia.</p>${blds}</section>
   <div class="logout"><form method="post" action="/wyloguj"><button class="btn sm">🚪 Wyloguj</button></form></div>` });
 }
-
-const shipSvg = (u) => `<svg class="ship" viewBox="0 0 200 120" aria-hidden="true">
-  <defs><linearGradient id="hg" x1="0" x2="1"><stop offset="0" stop-color="#2b3a67"/><stop offset="1" stop-color="#7fd6ff"/></linearGradient>
-  <radialGradient id="sh" cx=".5" cy=".5" r=".5"><stop offset=".7" stop-color="#3ee6ff" stop-opacity="0"/><stop offset="1" stop-color="#3ee6ff" stop-opacity="${Math.min(0.15 + u.s_shields * 0.07, 0.8).toFixed(2)}"/></radialGradient></defs>
-  <ellipse cx="105" cy="60" rx="${70 + Math.min(u.s_hull, 10) * 2}" ry="${38 + Math.min(u.s_shields, 10)}" fill="url(#sh)"/>
-  <path d="M30 60 L70 40 L150 46 L180 60 L150 74 L70 80 Z" fill="url(#hg)" stroke="#9fe8ff" stroke-width="1.5"/>
-  <path d="M70 40 L95 18 L115 44 Z M70 80 L95 102 L115 76 Z" fill="#24335c" stroke="#9fe8ff" stroke-width="1.2"/>
-  <ellipse cx="140" cy="60" rx="14" ry="6" fill="#0b1430" stroke="#3ee6ff"/>
-  ${Array.from({ length: Math.min(u.s_guns, 6) }, (_, i) => `<rect x="${118 + i * 7}" y="${i % 2 ? 76 : 40}" width="5" height="4" fill="#ff4fd8"/>`).join('')}
-  <path d="M30 54 L8 52 L14 60 L8 68 L30 66 Z" fill="#ff8a3d"><animate attributeName="opacity" values="1;.4;1" dur=".6s" repeatCount="indefinite"/></path>
-</svg>`;
 
 export function ship({ user, st, flash }) {
   const cap = R.moduleCap(user);
@@ -162,8 +235,8 @@ export function ship({ user, st, flash }) {
     </div>`;
   }).join('');
   return layout({ title: 'Statek', user, st, flash, active: 'statek', body: `
-  <section class="card center">
-    ${shipSvg(user)}
+  <section class="card center ship-card" style="--shield:${Math.min(0.15 + user.s_shields * 0.07, 0.8).toFixed(2)}">
+    <div class="ship-art">${img('ship', 'Twój statek', '', 320, true)}</div>
     <h2>Statek „${esc(user.username)}”</h2>
     ${hpBar(st)}
     <div class="stats">
@@ -182,7 +255,7 @@ export function battle({ user, st, flash, targets, recent, now }) {
     const locked = user.level < p.minLvl;
     const e = R.pirate(p, user.level);
     return `<div class="item ${locked ? 'locked' : ''}">
-      <div class="ic big">${p.icon}</div>
+      ${img('p_' + p.id, p.name, 'thumb', 64)}
       <div class="grow"><div class="row"><b>${p.name}</b><span class="lvl">${locked ? `🔒 od poz. ${p.minLvl}` : `poz. ${e.level}`}</span></div>
         <div class="muted small">${p.desc}</div>
         ${locked ? '' : `<div class="eff">❤️ ${e.hp} · 💥 ${e.atk} · 🔰 ${e.def}</div>`}</div>
@@ -203,7 +276,7 @@ export function battle({ user, st, flash, targets, recent, now }) {
       <span class="grow">${label}<br><small class="muted">${ago(b.created_at, now)}</small></span><span>›</span></a>`;
   }).join('') : '<p class="muted">Jeszcze nie walczyłeś.</p>';
   return layout({ title: 'Bitwa', user, st, flash, active: 'bitwa', body: `
-  <section class="card">${hpBar(st)}
+  <section class="card banner battle-banner" style="--bg:url('/img/battle_bg.webp?v=${V}')"><h2>Centrum dowodzenia</h2>${hpBar(st)}
     ${enough ? '' : `<p class="warn small">Statek jest zbyt uszkodzony (min. ${R.MIN_HP_RATIO * 100}% HP). Poczekaj na naprawę.</p>`}</section>
   <section class="card"><h3>☠️ Piraci</h3>${pir}</section>
   <section class="card"><h3>👾 Inni gracze</h3><p class="muted small">Wygrana = łup 10% metalu i kryształów rywala. Zaatakowany gracz dostaje 15 min ochrony.</p>${tg}</section>
@@ -219,8 +292,8 @@ export function battleLog({ user, st, flash, b, now }) {
     rw.levelUp ? `🎉 Awans na poziom ${rw.levelUp}!` : ''].filter(Boolean).join(' · ');
   const again = b.kind === 'pve' && mine ? `<form method="post" action="/bitwa/piraci/${esc(rw.tier)}"><button class="btn danger wide">⚔️ Walcz ponownie</button></form>` : '';
   return layout({ title: 'Raport z bitwy', user, st, flash, active: 'bitwa', body: `
-  <section class="card center result ${won ? 'win' : 'lose'}">
-    <div class="huge">${won ? '🏆' : '💀'}</div>
+  <section class="card center result banner ${won ? 'win' : 'lose'}" style="--bg:url('/img/battle_bg.webp?v=${V}')">
+    ${b.kind === 'pve' && rw.tier ? img('p_' + rw.tier, b.enemy_name, 'enemy', 120, true) : `<div class="huge">${won ? '🏆' : '💀'}</div>`}
     <h2>${won ? 'ZWYCIĘSTWO' : 'PORAŻKA'}</h2>
     <p>${esc(b.attacker_name)} <span class="muted">vs</span> ${esc(b.kind === 'pve' ? b.enemy_name : b.defender_name)}</p>
     ${mine && rewardLine ? `<p class="reward">${rewardLine}</p>` : ''}

@@ -22,5 +22,10 @@
     const b = e.target.querySelector('button');
     if (b) setTimeout(() => { b.disabled = true; }, 0);
   });
+  // Instalacja PWA (Android/Chrome)
+  const ib = document.getElementById('install-btn');
+  let deferred;
+  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferred = e; if (ib) ib.hidden = false; });
+  if (ib) ib.addEventListener('click', async () => { if (!deferred) return; deferred.prompt(); await deferred.userChoice; deferred = null; ib.hidden = true; });
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 })();
