@@ -252,6 +252,41 @@ export const MIGRATIONS = [
     "ALTER TABLE users ADD COLUMN title TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE chat_messages ADD COLUMN title TEXT NOT NULL DEFAULT ''",
   ]],
+  ['009_market_referrals', [
+    'CREATE TABLE IF NOT EXISTS app_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)',
+    `CREATE TABLE IF NOT EXISTS user_ips (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      ip_hash TEXT NOT NULL,
+      device TEXT NOT NULL,
+      first_at INTEGER NOT NULL,
+      last_at INTEGER NOT NULL,
+      PRIMARY KEY (user_id, ip_hash, device)
+    )`,
+    'CREATE INDEX IF NOT EXISTS user_ips_ip ON user_ips(ip_hash)',
+    'CREATE INDEX IF NOT EXISTS user_ips_dev ON user_ips(device)',
+    `CREATE TABLE IF NOT EXISTS market_offers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      seller_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      sell_res TEXT NOT NULL,
+      sell_amt INTEGER NOT NULL,
+      buy_res TEXT NOT NULL,
+      buy_amt INTEGER NOT NULL,
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open',
+      buyer_id INTEGER,
+      closed_at INTEGER NOT NULL DEFAULT 0
+    )`,
+    'CREATE INDEX IF NOT EXISTS market_open ON market_offers(status, sell_res)',
+    'CREATE INDEX IF NOT EXISTS market_seller ON market_offers(seller_id, status)',
+    'CREATE INDEX IF NOT EXISTS market_buyer ON market_offers(buyer_id, closed_at)',
+    'ALTER TABLE users ADD COLUMN ref_code TEXT',
+    'CREATE UNIQUE INDEX IF NOT EXISTS users_ref_code ON users(ref_code)',
+    'ALTER TABLE users ADD COLUMN referred_by INTEGER',
+    'ALTER TABLE users ADD COLUMN ref_state INTEGER NOT NULL DEFAULT 0',
+    "ALTER TABLE users ADD COLUMN reg_ip TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE users ADD COLUMN reg_device TEXT NOT NULL DEFAULT ''",
+  ]],
 ];
 
 async function migrate(api, conv = (s) => s) {

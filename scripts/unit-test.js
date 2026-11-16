@@ -8,6 +8,8 @@ import * as C from '../src/corp.js';
 import * as R from '../src/rules.js';
 import * as AR from '../src/arena.js';
 import * as A from '../src/achievements.js';
+import * as MK from '../src/market.js';
+import * as RF from '../src/referral.js';
 let n = 0;
 const t = (name, fn) => { fn(); n++; console.log(`✅ ${name}`); };
 
@@ -128,5 +130,19 @@ t('Osiągnięcia: progi, postęp i tytuły', () => {
   assert.deepEqual(A.progress(A.BY_ID.postrach, s), [30, 100]);
   assert.equal(A.titleOf('lowca'), 'Łowca piratów'); assert.equal(A.titleOf('pierwsza_krew'), ''); assert.equal(A.titleOf('xyz'), '');
   assert.equal(new Set(A.LIST.map((a) => a.id)).size, A.COUNT);
+});
+t('Rynek: walidacja ofert, widełki cen, podatek', () => {
+  assert.equal(MK.validate({ sellRes: 'metal', sellAmt: 1000, buyRes: 'crystal', buyAmt: 500 }), null);
+  assert.match(MK.validate({ sellRes: 'metal', sellAmt: 1000, buyRes: 'metal', buyAmt: 500 }), /różne/);
+  assert.match(MK.validate({ sellRes: 'metal', sellAmt: 1000, buyRes: 'crystal', buyAmt: 2000 }), /widełkami/);
+  assert.match(MK.validate({ sellRes: 'metal', sellAmt: 10, buyRes: 'crystal', buyAmt: 5 }), /Ilości/);
+  assert.match(MK.validate({ sellRes: 'zloto', sellAmt: 100, buyRes: 'crystal', buyAmt: 50 }), /Nieznany/);
+  assert.equal(MK.sellerGets(500), 450); assert.equal(MK.taxOf(500), 50); assert.equal(MK.sellerGets(55), 49);
+});
+t('Zaproszenia: kody polecające', () => {
+  let i = 0; const rnd = () => ((i++ * 0.137) % 1);
+  const c = RF.newCode(rnd);
+  assert.ok(RF.CODE_RE.test(c)); assert.ok(!RF.CODE_RE.test('ABC'));
+  assert.ok(RF.INVITER_REWARD.core === 1 && RF.LEVEL === 5);
 });
 console.log(`\n🎉 Testy jednostkowe: ${n} OK`);

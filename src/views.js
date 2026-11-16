@@ -114,7 +114,7 @@ const FAQ = [
   ['Co daje korporacja?', 'Członkowie korporacji dostają +5% XP z bitew i wspólnie rywalizują w rankingu korporacji.'],
 ];
 
-export function landing({ online, players, battles24, top, flash, baseUrl }) {
+export function landing({ online, players, battles24, top, flash, baseUrl, invitedBy = null, refCode = '' }) {
   const url = baseUrl || '';
   const title = 'Kolonie – darmowa kosmiczna gra MMORPG w przeglądarce';
   const head = `<link rel="canonical" href="${esc(url)}/">
@@ -167,7 +167,9 @@ export function landing({ online, players, battles24, top, flash, baseUrl }) {
   <section id="start" class="card auth">
     <h2 class="section-title">Załóż kolonię – za darmo</h2>
     <p class="muted small">Wystarczy nazwa i hasło. Żadnych maili, żadnej instalacji.</p>
+    ${invitedBy ? `<div class="callout invite-cta">${pi('invite', 44)}<span class="grow"><b>Zaproszenie od ${esc(invitedBy)}</b><br><small>Osiągnij poziom 5, a oboje dostaniecie nagrody!</small></span></div>` : ''}
     <form method="post" action="/rejestracja" class="form">
+      ${refCode ? `<input type="hidden" name="ref" value="${esc(refCode)}">` : ''}
       <input name="username" placeholder="Nazwa komandora (3–16 znaków)" minlength="3" maxlength="16" required autocomplete="username" aria-label="Nazwa komandora">
       <input name="password" type="password" placeholder="Hasło (min. 6 znaków)" minlength="6" required autocomplete="new-password" aria-label="Hasło">
       <button class="btn cta wide">${ic('ship')} Wyląduj na planecie</button>
@@ -362,6 +364,11 @@ export function colony({ user, st, flash, now = Date.now() }) {
     <form method="post" action="/kolonia/zbierz"><button class="btn primary wide collect" data-tut="collect">${pi('collect', 34, 'btn-pi')} Zbierz surowce</button></form>
   </section>
   <section class="card"><h3 class="with-ic">${ic('colony', 'acc')} Budynki</h3><p class="muted small">Jedna budowa naraz. Rozpoczęcie budowy zbiera surowce z magazynu wydobycia.</p>${blds}</section>
+  <section class="card"><h3 class="with-ic">${ic('users', 'acc')} Handel i społeczność</h3>
+    <a class="callout market-cta" href="/rynek">${pi('market', 48)}<span class="grow"><b>Rynek surowców</b><br><small>Wymieniaj metal, kryształy i energię z innymi graczami</small></span>${ic('up', 'chev-r')}</a>
+    <a class="callout invite-cta" href="/zaproszenia">${pi('invite', 48)}<span class="grow"><b>Zaproś znajomych</b><br><small>Nagrody dla Was obojga, gdy znajomy osiągnie poziom 5</small></span>${ic('up', 'chev-r')}</a>
+    <a class="callout" href="/osiagniecia">${pi('achievement', 48)}<span class="grow"><b>Osiągnięcia i tytuły</b><br><small>Zdobywaj odznaczenia i tytuł przy nicku</small></span>${ic('up', 'chev-r')}</a>
+  </section>
   <section class="card push-card" id="push-card">
     <div class="with-ic">${pi('bell', 56, 'float')}<div class="grow"><h3 style="margin:0">Powiadomienia</h3><small class="muted" data-push-status>Dowiedz się od razu, gdy ktoś Cię zaatakuje albo skończy się budowa.</small></div></div>
     <div class="push-btns"><button type="button" class="btn primary" data-push-toggle hidden>Włącz powiadomienia</button><button type="button" class="btn sm" data-push-test hidden>Wyślij test</button></div>

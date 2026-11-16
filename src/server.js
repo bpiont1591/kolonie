@@ -21,7 +21,10 @@ import registerPush from './features/push.js';
 import registerArena, { ensureArena, arenaSummary } from './features/arena.js';
 import registerAchievements, { checkAchievements, achText } from './features/achievements.js';
 import { N, fire } from './notify.js';
-import { adminTokenOk, purgeTestUsers } from './security.js';
+import { adminTokenOk, purgeTestUsers, recordSeen, fingerprint } from './security.js';
+import registerMarket from './features/market.js';
+import registerReferral, { checkReferral, findInviter } from './features/referral.js';
+import * as RF from './referral.js';
 
 const scrypt = promisify(crypto.scrypt);
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -100,6 +103,9 @@ app.use((req, res, next) => {
 app.use(async (req, res, next) => {
   try {
     req.cookiesObj = parseCookies(req);
+    // identyfikator urządzenia (losowy, długoterminowy) – do wykrywania multikont
+    req.did = req.cookiesObj.did;
+    if (!/^[\w-]{16,40}$/.test(req.did || '')) { req.did = crypto.randomBytes(16).toString('base64url'); setCookie(res, 'did', req.did, 2 * 365 * 86400); }
     const sid = req.cookiesObj.sid;
     if (sid) {
       const s = await db.get('SELECT user_id, expires_at FROM sessions WHERE token_hash = ?', [sha(sid)]);
@@ -111,6 +117,7 @@ app.use(async (req, res, next) => {
         req.user = await G.augment(db, await db.get('SELECT * FROM users WHERE id = ?', [s.user_id]), Date.now());
         onSettled(req.user, done);
       }
+      if (req.user) await recordSeen(db, req.user.id, req);
     }
     if (req.cookiesObj.flash) {
       try { req.flash = JSON.parse(req.cookiesObj.flash); } catch { /* ignore */ }
@@ -153,8 +160,10 @@ const action = (redirect, fn) => async (req, res, next) => {
       if (sres.done.length) onSettled(sres.u, sres.done);
       const r = await fn(t, sres.u, now, req);
       const ach = await checkAchievements(t, req.user.id, now);
-      if (ach.length) return { ...r, msg: [r.msg, achText(ach)].filter(Boolean).join(' · '), data: { ...(r.data || {}), achievements: ach.map((a) => a.id) } };
-      return r;
+      const refMsg = await checkReferral(t, req.user.id, now);
+      if (!ach.length && !refMsg) return r;
+      return { ...r, msg: [r.msg, achText(ach), refMsg].filter(Boolean).join(' · '),
+        data: { ...(r.data || {}), ...(ach.length ? { achievements: ach.map((a) => a.id) } : {}), ...(refMsg ? { referral: refMsg } : {}) } };
     });
     respond(req, res, { ok: true, msg: out.msg, redirect: out.redirect || redirect, data: out.data });
   } catch (e) {
@@ -171,6 +180,7 @@ function materialize(u, now) {
 const payable = (have, c) => R.RES_KEYS.every((k) => have[k] >= c[k]);
 const costText = (c) => R.RES_KEYS.filter((k) => c[k]).map((k) => `${R.RESOURCES[k].icon}${c[k]}`).join(' ');
 
+const baseUrl = (req) => process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || `${req.protocol}://${req.get('host')}`;
 // ---------- strony publiczne ----------
 app.get('/', page(async (req, now) => {
   if (req.user) return '<meta http-equiv="refresh" content="0;url=/kolonia">';
@@ -179,8 +189,10 @@ app.get('/', page(async (req, now) => {
   const battles24 = (await db.get('SELECT COUNT(*) AS n FROM battles WHERE created_at > ?', [now - 86400_000])).n;
   const top = await db.all(`SELECT u.username, u.level, c.tag FROM users u LEFT JOIN corps c ON c.id = u.corp_id
     ORDER BY u.level DESC, u.xp DESC, u.id ASC LIMIT 5`);
-  const baseUrl = process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || `${req.protocol}://${req.get('host')}`;
-  return V.landing({ players, online, battles24, top, flash: req.flash, baseUrl });
+  const refCode = String(req.query.ref || req.cookiesObj.ref || '').toLowerCase();
+  const inviter = await findInviter(db, refCode);
+  if (inviter && req.query.ref) req.res.append('Set-Cookie', `ref=${refCode}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${30 * 86400}`);
+  return V.landing({ players, online, battles24, top, flash: req.flash, baseUrl: baseUrl(req), invitedBy: inviter?.username || null, refCode: inviter ? refCode : '' });
 }));
 
 const NAME_RE = /^[\p{L}\p{N}_-]{3,16}$/u;
@@ -197,12 +209,20 @@ app.post('/rejestracja', async (req, res, next) => {
     const now = Date.now();
     const planet = R.PLANETS[crypto.randomInt(R.PLANETS.length)];
     const base = { s_hull: 1, s_guns: 1, s_shields: 1, level: 1 };
+    const fp = await fingerprint(db, req);
+    const inviter = await findInviter(db, String(req.body.ref || req.cookiesObj.ref || '').toLowerCase());
     const id = await db.tx(async (t) => {
       if (await t.get('SELECT id FROM users WHERE name_key = ?', [username.toLowerCase()])) fail('Ta nazwa jest już zajęta.');
-      const id = await t.insert(`INSERT INTO users (username, name_key, pass_hash, planet, created_at, metal, crystal, energy, collected_at, hp, hp_at, is_test, tut_step)
-        VALUES (?, ?, ?, ?, ?, 400, 200, 150, ?, ?, ?, ?, 1)`, [username, username.toLowerCase(), hash, planet, now, now - R.START_PENDING_MS, R.shipStats(base).maxHp, now, isTest]);
+      // zaproszenie z tego samego połączenia/urządzenia co zapraszający – bez nagrody (multikonto)
+      const sameAsInviter = inviter && await t.get('SELECT 1 AS x FROM user_ips WHERE user_id = ? AND (ip_hash = ? OR device = ?) LIMIT 1', [inviter.id, fp.ip, fp.device]);
+      const id = await t.insert(`INSERT INTO users (username, name_key, pass_hash, planet, created_at, metal, crystal, energy, collected_at, hp, hp_at, is_test, tut_step,
+          reg_ip, reg_device, referred_by, ref_state)
+        VALUES (?, ?, ?, ?, ?, 400, 200, 150, ?, ?, ?, ?, 1, ?, ?, ?, ?)`, [username, username.toLowerCase(), hash, planet, now, now - R.START_PENDING_MS, R.shipStats(base).maxHp, now, isTest,
+        fp.ip, fp.device, inviter?.id ?? null, sameAsInviter ? RF.STATE.blocked : RF.STATE.pending]);
       return id;
     });
+    await recordSeen(db, id, req, now);
+    if (inviter) res.append('Set-Cookie', 'ref=; Path=/; Max-Age=0');
     await startSession(res, id);
     respond(req, res, { ok: true, msg: `Witaj na planecie ${planet}, komandorze ${username}!`, redirect: '/kolonia', data: { userId: id, planet } });
   } catch (e) {
@@ -218,6 +238,7 @@ app.post('/logowanie', async (req, res, next) => {
     const u = await db.get('SELECT id, pass_hash FROM users WHERE name_key = ?', [username.toLowerCase()]);
     if (!u || !(await verifyPassword(String(req.body.password || ''), u.pass_hash)))
       return respond(req, res, { ok: false, msg: 'Błędna nazwa lub hasło.', redirect: '/' });
+    await recordSeen(db, u.id, req);
     await startSession(res, u.id);
     respond(req, res, { ok: true, msg: 'Witaj z powrotem, komandorze!', redirect: '/kolonia', data: { userId: u.id } });
   } catch (e) { next(e); }
@@ -236,7 +257,7 @@ app.get('/kolonia', auth, page((req, now, st) => V.colony({ user: req.user, st, 
 
 app.get('/api/stan', auth, (req, res) => {
   const now = Date.now();
-  const { pass_hash, _corp, ...pub } = req.user;
+  const { pass_hash, _corp, reg_ip, reg_device, ...pub } = req.user;
   res.set('Cache-Control', 'no-store').json({ ok: true, now, user: pub, ...V.state(req.user, now), tut: TUT.state(req.user, now) });
 });
 
@@ -422,7 +443,7 @@ app.get('/api/ranking', auth, async (req, res, next) => {
 
 // ---------- moduły funkcji ----------
 const DEV = process.env.DEV_HOOKS === '1' && !process.env.RENDER;
-const ctx = { dev: DEV, xpGain, preBattle, settledHooks, devHooks, app, db, auth, page, action, respond, wantsJson, materialize, payable, costText };
+const ctx = { dev: DEV, baseUrl, xpGain, preBattle, settledHooks, devHooks, app, db, auth, page, action, respond, wantsJson, materialize, payable, costText };
 registerMissions(ctx);
 registerExpeditions(ctx);
 registerCorp(ctx);
@@ -431,6 +452,8 @@ registerTutorial(ctx);
 registerSeason(ctx);
 registerArena(ctx);
 registerAchievements(ctx);
+registerMarket(ctx);
+registerReferral(ctx);
 registerPush(ctx);
 
 // ---------- sprzątanie kont testowych (token admina w nagłówku; działa też na produkcji) ----------
@@ -457,6 +480,10 @@ if (process.env.DEV_HOOKS === '1' && !process.env.RENDER) {
     await t.run("UPDATE expeditions SET started_at = started_at - ?, return_at = return_at - ? WHERE user_id = ? AND status = 'active'", [ms, ms, u.id]);
     for (const h of devHooks) await h(t, u, ms);
     return { msg: 'Przewinięto czas.' };
+  }));
+  app.post('/api/dev/poziom', auth, action('/', async (t, u, now, req) => {
+    await t.run('UPDATE users SET level = ?, xp = 0 WHERE id = ?', [Math.max(1, Math.min(50, Number(req.body.level) || 1)), u.id]);
+    return { msg: 'ok' };
   }));
   app.post('/api/dev/surowce', auth, action('/', async (t, u) => {
     await t.run('UPDATE users SET metal = metal + 20000, crystal = crystal + 20000, energy = energy + 20000 WHERE id = ?', [u.id]);

@@ -21,9 +21,9 @@ const check = (cond, label, extra = '') => {
 };
 
 class Client {
-  constructor(name) { this.name = name; this.cookie = ''; }
+  constructor(name, hdr = {}) { this.name = name; this.cookie = ''; this.hdr = hdr; }
   async req(method, path, body, json = true) {
-    const headers = { cookie: this.cookie, ...T_HDR };
+    const headers = { cookie: this.cookie, ...T_HDR, ...this.hdr };
     if (json) headers.accept = 'application/json';
     if (body) headers['content-type'] = 'application/x-www-form-urlencoded';
     const res = await fetch(BASE + path, { method, headers, body: body ? new URLSearchParams(body) : undefined, redirect: 'manual' });
@@ -38,7 +38,7 @@ class Client {
   get(p, json = true) { return this.req('GET', p, null, json); }
   post(p, b = {}) { return this.req('POST', p, b); }
   async postJson(path, body) {
-    const res = await fetch(BASE + path, { method: 'POST', headers: { cookie: this.cookie, accept: 'application/json', 'content-type': 'application/json', ...T_HDR }, body: JSON.stringify(body) });
+    const res = await fetch(BASE + path, { method: 'POST', headers: { cookie: this.cookie, accept: 'application/json', 'content-type': 'application/json', ...T_HDR, ...this.hdr }, body: JSON.stringify(body) });
     const text = await res.text();
     let data; try { data = JSON.parse(text); } catch { data = text; }
     return { status: res.status, data };
@@ -387,6 +387,79 @@ if (DEV) {
 }
 r = await E.post('/osiagniecia/tytul/brak');
 check(r.data.ok && r.data.title === '', 'Tytuł: zdjęcie tytułu');
+
+// ---------- v5 etap 4: rynek i zaproszenia ----------
+const fpOf = (k) => (T_HDR['x-kolonie-test'] ? { 'x-test-ip': `${k}-${suffix}`, 'x-test-device': `${k}-${suffix}` } : {});
+const M1 = new Client(`Kupiec_${suffix}`, fpOf('m1')), M2 = new Client(`Handlarz_${suffix}`, fpOf('m2')), M3 = new Client(`Klon_${suffix}`, fpOf('m1'));
+for (const c of [M1, M2, M3]) { r = await c.post('/rejestracja', { username: c.name, password: 'rynek123' }); c.id = r.data.userId; }
+check(M1.id && M2.id && M3.id, 'Rynek: konta testowe handlarzy');
+r = await M1.post('/rynek/wystaw', { sell_res: 'metal', sell_amt: 300, buy_res: 'crystal', buy_amt: 150 });
+check(!r.data.ok && /poziomu 3/.test(r.data.msg), 'Rynek: dostęp od poziomu 3', r.data.msg);
+r = await M1.get('/rynek', false);
+check(r.status === 200 && r.data.includes('Rynek surowców') && r.data.includes('Podatek 10%'), 'Rynek: strona');
+r = await M1.get('/api/rynek');
+check(r.data.ok && Array.isArray(r.data.offers) && r.data.tax === 0.1, 'Rynek: API ofert');
+if (DEV) {
+  for (const c of [M1, M2, M3]) { await c.post('/api/dev/poziom', { level: 4 }); await c.post('/api/dev/surowce'); }
+  r = await M1.post('/rynek/wystaw', { sell_res: 'metal', sell_amt: 300, buy_res: 'metal', buy_amt: 300 });
+  check(!r.data.ok, 'Rynek: ten sam surowiec odrzucony', r.data.msg);
+  r = await M1.post('/rynek/wystaw', { sell_res: 'metal', sell_amt: 1000, buy_res: 'crystal', buy_amt: 2000 });
+  check(!r.data.ok && /widełkami/.test(r.data.msg), 'Rynek: cena poza widełkami odrzucona', r.data.msg);
+  const s1 = (await M1.get('/api/stan')).data.stock;
+  r = await M1.post('/rynek/wystaw', { sell_res: 'metal', sell_amt: 1000, buy_res: 'crystal', buy_amt: 500 });
+  check(r.data.ok && r.data.offerId > 0, 'Rynek: wystawienie oferty (depozyt)', r.data.msg);
+  const offer1 = r.data.offerId;
+  let s1b = (await M1.get('/api/stan')).data.stock;
+  check(Math.round(s1.metal - s1b.metal) === 1000 || s1.metal - s1b.metal > 990, 'Rynek: metal pobrany do depozytu', `${Math.floor(s1.metal)} → ${Math.floor(s1b.metal)}`);
+  r = await M1.post(`/rynek/kup/${offer1}`);
+  check(!r.data.ok, 'Rynek: nie można kupić własnej oferty');
+  r = await M3.post(`/rynek/kup/${offer1}`);
+  check(!r.data.ok && /multikont/.test(r.data.msg), 'Rynek: blokada handlu między kontami z tego samego IP/urządzenia', r.data.msg);
+  const s2 = (await M2.get('/api/stan')).data.stock;
+  r = await M2.post(`/rynek/kup/${offer1}`);
+  check(r.data.ok && r.data.sellerGets === 450, 'Rynek: zakup oferty (podatek 10%)', r.data.msg);
+  const s2b = (await M2.get('/api/stan')).data.stock;
+  check(s2b.metal - s2.metal >= 999 && s2.crystal - s2b.crystal >= 499 && s2.crystal - s2b.crystal < 520, 'Rynek: kupujący otrzymał metal i zapłacił kryształami');
+  const s1c = (await M1.get('/api/stan')).data.stock;
+  check(s1c.crystal - s1b.crystal >= 449 && s1c.crystal - s1b.crystal < 470, 'Rynek: sprzedający otrzymał 450 kryształów (po podatku)', `${Math.floor(s1b.crystal)} → ${Math.floor(s1c.crystal)}`);
+  r = await M2.post(`/rynek/kup/${offer1}`);
+  check(!r.data.ok, 'Rynek: oferta sprzedana tylko raz');
+  r = await M1.post('/rynek/wystaw', { sell_res: 'energy', sell_amt: 400, buy_res: 'metal', buy_amt: 600 });
+  const offer2 = r.data.offerId;
+  r = await M1.post(`/rynek/anuluj/${offer2}`);
+  check(r.data.ok, 'Rynek: wycofanie oferty ze zwrotem depozytu', r.data.msg);
+  r = await M1.get('/rynek', false);
+  check(r.data.includes('Sprzedałeś graczowi') && r.data.includes('wycofana'), 'Rynek: historia transakcji');
+}
+// zaproszenia
+const R1 = new Client(`Mentor_${suffix}`, fpOf('r1'));
+r = await R1.post('/rejestracja', { username: R1.name, password: 'mentor123' }); R1.id = r.data.userId;
+let rf = (await R1.get('/api/zaproszenia')).data;
+check(rf.ok && /^[a-z2-9]{8}$/.test(rf.code) && rf.link.endsWith(`/?ref=${rf.code}`), 'Zaproszenia: link polecający', rf.link);
+r = await new Client('anon').get(`/?ref=${rf.code}`, false);
+check(r.data.includes(`Zaproszenie od ${R1.name}`) && r.data.includes(`name="ref" value="${rf.code}"`), 'Zaproszenia: strona startowa z zaproszeniem');
+const R2 = new Client(`Uczen_${suffix}`, fpOf('r2')), R3 = new Client(`Klon2_${suffix}`, fpOf('r1'));
+r = await R2.post('/rejestracja', { username: R2.name, password: 'uczen123', ref: rf.code }); R2.id = r.data.userId;
+r = await R3.post('/rejestracja', { username: R3.name, password: 'klon1234', ref: rf.code }); R3.id = r.data.userId;
+st = (await R2.get('/api/stan')).data;
+check(st.user.referred_by === R1.id && st.user.ref_state === 0 && st.user.reg_ip === undefined, 'Zaproszenia: rejestracja z kodem (bez ujawniania IP)');
+rf = (await R1.get('/api/zaproszenia')).data;
+check(rf.invited.length === 2 && rf.invited.find((i) => i.id === R3.id)?.state === 2 && rf.invited.find((i) => i.id === R2.id)?.state === 0, 'Zaproszenia: konto z tego samego IP/urządzenia oznaczone (bez nagrody)');
+r = await R1.get('/zaproszenia', false);
+check(r.status === 200 && r.data.includes(R2.name) && r.data.includes('zablokowane'), 'Zaproszenia: strona z listą zaproszonych');
+if (DEV) {
+  const m0 = (await R1.get('/api/stan')).data.stock.metal;
+  r = await R2.post('/api/dev/poziom', { level: 5 });
+  check(r.data.ok && /Nagroda za dołączenie/.test(r.data.referral || ''), 'Zaproszenia: nagroda dla zaproszonego na poziomie 5', r.data.referral);
+  const m1 = (await R1.get('/api/stan')).data;
+  check(m1.stock.metal - m0 >= 1999 && m1.user.boost_until > Date.now(), 'Zaproszenia: nagroda dla zapraszającego (z Rdzeniem)');
+  rf = (await R1.get('/api/zaproszenia')).data;
+  check(rf.invited.find((i) => i.id === R2.id)?.state === 1, 'Zaproszenia: status „nagrodzone”');
+  r = await R2.post('/api/dev/misja', { ev: 'noop' });
+  check(!r.data.referral, 'Zaproszenia: nagroda tylko raz');
+  r = await R3.post('/api/dev/poziom', { level: 5 });
+  check(!r.data.referral, 'Zaproszenia: multikonto bez nagrody');
+}
 
 // ---------- etap 4: czat ----------
 const D = new Client(`Vega_${suffix}`);
