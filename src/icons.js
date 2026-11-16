@@ -1,4 +1,5 @@
 // Zestaw ikon UI: ręcznie rysowane glify SVG (spójny styl liniowy, gradient teal) + rastrowe ikony premium (WebP).
+export const V = 6; // wersja zasobów statycznych (cache-busting)
 const P = {
   colony: '<path d="M2.5 20.5h19"/><path d="M3.5 20.5a5.75 5.75 0 0 1 11.5 0"/><path d="M9.25 14.75v5.75M5.2 17.4h8.1"/><path d="M16.75 20.5V9.5h3.5v11"/><path d="M18.5 9.5V5"/><circle cx="18.5" cy="4" r=".9" class="f"/><path d="M16.75 13h3.5M16.75 16.5h3.5"/>',
   ship: '<path d="M13.5 4.5c3-1.4 7-1.5 7-1.5s-.1 4-1.5 7L12 17l-5-5z"/><path d="M7 12l-3.5.8 2.2 2.2M12 17l-.8 3.5-2.2-2.2"/><path d="M6.2 17.8 3.5 20.5"/><circle cx="15.5" cy="8.5" r="1.6" class="f"/>',
@@ -18,6 +19,9 @@ const P = {
   crown: '<path d="M4 18.5h16l1-10.5-5 4.2-4-6.2-4 6.2-5-4.2z"/><path d="M4 21h16"/>',
   log: '<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.2" class="f"/><circle cx="4.5" cy="12" r="1.2" class="f"/><circle cx="4.5" cy="18" r="1.2" class="f"/>',
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  quest: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1.4" class="f"/><path d="M12 1.5v4M12 18.5v4M1.5 12h4M18.5 12h4"/>',
+  gift: '<rect x="3.5" y="9" width="17" height="11.5" rx="1.8"/><path d="M2.5 9h19v-2.5h-19zM12 6.5v14"/><path d="M12 6.5C10 3 6.5 3.5 7 5.5s5 1 5 1 4.2.9 5-1-3-2.5-5 1z"/>',
+  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/>',
   hole: '<circle cx="12" cy="12" r="3"/><path d="M12 3.5a8.5 8.5 0 0 1 8.5 8.5M20.5 12a8.5 8.5 0 0 1-8.5 8.5M12 20.5A8.5 8.5 0 0 1 3.5 12M3.5 12A8.5 8.5 0 0 1 12 3.5"/>',
 };
 export const SPRITE = `<svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
@@ -29,7 +33,8 @@ export const NAMES = Object.keys(P);
 export const ic = (name, cls = '') => `<svg class="gi ${cls}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
 /** Ikona rastrowa premium (przezroczysty WebP). */
 export const pi = (name, size = 32, cls = '', alt = '') =>
-  `<img src="/img/i_${name}.webp?v=5" class="pi ${cls}" width="${size}" height="${size}" alt="${alt}" decoding="async">`;
-export const RASTER = ['hull', 'guns', 'shields', 'repair', 'power', 'xp', 'pvp', 'corp', 'trophy', 'collect', 'defeat'];
+  `<img src="/img/i_${name}.webp?v=${V}" class="pi ${cls}" width="${size}" height="${size}" alt="${alt}" decoding="async">`;
+export const RASTER = ['hull', 'guns', 'shields', 'repair', 'power', 'xp', 'pvp', 'corp', 'trophy', 'collect', 'defeat',
+  'daily', 'quest', 'chest', 'core', 'timer', 'expedition', 'treasury', 'war', 'bell'];
 /** Plakietka poziomu (sześciokąt). */
 export const lvBadge = (n, cls = '') => `<span class="lv ${cls}" title="Poziom ${n}"><b>${n}</b></span>`;

@@ -57,20 +57,26 @@ export function upgradeCost(def, lvl) {
   return { metal: Math.round(def.base.metal * f), crystal: Math.round(def.base.crystal * f), energy: Math.round(def.base.energy * f) };
 }
 
-/** Produkcja na minutę. */
-export function production(u) {
-  return { metal: 8 * u.b_mine * SPEED, crystal: 3 * u.b_mine * SPEED, energy: 5 * u.b_power * SPEED };
+export const BOOST_BONUS = 0.5; // Rdzeń kwantowy: +50% wydobycia
+/** Stały mnożnik produkcji (bonusy korporacji ustawiane w u._prodBonus). */
+export const prodMult = (u) => 1 + (u._prodBonus || 0);
+const boostOn = (u, now) => !!now && (u.boost_until || 0) > now;
+/** Produkcja na minutę (z aktywnym Rdzeniem kwantowym, jeśli podano `now`). */
+export function production(u, now) {
+  const m = prodMult(u) * (boostOn(u, now) ? 1 + BOOST_BONUS : 1);
+  return { metal: 8 * u.b_mine * SPEED * m, crystal: 3 * u.b_mine * SPEED * m, energy: 5 * u.b_power * SPEED * m };
 }
-export function storageCap(u) {
-  const p = production(u);
+export function storageCap(u, now) {
+  const p = production(u, now);
   return { metal: Math.floor(p.metal * STORAGE_MINUTES), crystal: Math.floor(p.crystal * STORAGE_MINUTES), energy: Math.floor(p.energy * STORAGE_MINUTES) };
 }
-/** Surowce czekające w magazynie wydobycia (do zebrania). */
+/** Surowce czekające w magazynie wydobycia (do zebrania). Doładowanie liczone tylko w oknie jego trwania. */
 export function pending(u, now) {
   const mins = Math.max(0, (now - u.collected_at) / MIN);
-  const p = production(u), cap = storageCap(u);
+  const boosted = Math.max(0, (Math.min(now, u.boost_until || 0) - u.collected_at) / MIN);
+  const p = production(u), cap = storageCap(u, now);
   const out = {};
-  for (const k of RES_KEYS) out[k] = Math.floor(Math.min(p[k] * mins, cap[k]));
+  for (const k of RES_KEYS) out[k] = Math.floor(Math.min(p[k] * (mins + BOOST_BONUS * boosted), cap[k]));
   return out;
 }
 

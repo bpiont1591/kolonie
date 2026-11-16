@@ -1,5 +1,7 @@
 import * as R from './rules.js';
-import { SPRITE, ic, pi, lvBadge } from './icons.js';
+import { SPRITE, ic, pi, lvBadge, V as ASSET_V } from './icons.js';
+import * as Q from './quests.js';
+import { dur } from './time.js';
 export { ic, pi, lvBadge };
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -23,8 +25,8 @@ export function state(u, now) {
   return {
     stock: { metal: u.metal, crystal: u.crystal, energy: u.energy },
     pending: R.pending(u, now),
-    rates: R.production(u),
-    cap: R.storageCap(u),
+    rates: R.production(u, now),
+    cap: R.storageCap(u, now),
     ship: { ...ship, hp: R.currentHp(u, now), repair: R.repairPerMin(u), power: R.power(u) },
     xpNeed: R.xpForNext(u.level),
   };
@@ -36,7 +38,7 @@ function hpBar(st) {
     <i style="width:${pct}%"></i><span>${ic('heart', 'hp-ic')} <b data-hp-text>${st.ship.hp}</b>/${st.ship.maxHp} HP</span></div>`;
 }
 
-const V = 5; // wersja zasobów statycznych (cache-busting)
+const V = ASSET_V; // wersja zasobów statycznych (cache-busting)
 export const img = (name, alt = '', cls = '', size = 64, eager = false) =>
   `<img src="/img/${name}.webp?v=${V}" alt="${esc(alt)}" class="${cls}" width="${size}" height="${size}" decoding="async"${eager ? '' : ' loading="lazy"'}>`;
 export const resIcon = (k, size = 18) => `<img src="/img/r_${k}.webp?v=${V}" alt="${R.RESOURCES[k].name}" title="${R.RESOURCES[k].name}" class="ri" width="${size}" height="${size}">`;
@@ -53,10 +55,10 @@ export function layout({ title, user, st, body, flash, active = '', head = '', b
   </header>` : '';
   const tabs = [
     ['kolonia', '/kolonia', 'colony', 'Kolonia'], ['statek', '/statek', 'ship', 'Statek'], ['bitwa', '/bitwa', 'battle', 'Bitwa'],
-    ['korporacja', '/korporacja', 'corp', 'Korpo'], ['ranking', '/ranking', 'rank', 'Ranking'],
+    ['misje', '/misje', 'quest', 'Misje'], ['korporacja', '/korporacja', 'corp', 'Korpo'], ['ranking', '/ranking', 'rank', 'Ranking'],
   ];
   const nav = user ? `<nav class="tabs">${tabs.map(([id, href, icon, label]) =>
-    `<a href="${href}" class="${active === id ? 'on' : ''}"${active === id ? ' aria-current="page"' : ''}>${ic(icon)}<span>${label}</span></a>`).join('')}</nav>` : '';
+    `<a href="${href}" class="${active === id ? 'on' : ''}"${active === id ? ' aria-current="page"' : ''}>${ic(icon)}<span>${label}</span>${st?.badges?.[id] ? `<i class="badge">${st.badges[id] > 9 ? '9+' : st.badges[id]}</i>` : ''}</a>`).join('')}</nav>` : '';
   const fl = flash ? `<div class="flash ${flash.ok ? 'ok' : 'err'}" role="status">${emo(esc(flash.msg))}</div>` : '';
   const fullTitle = title.includes('Kolonie') ? title : `${title} · Kolonie`;
   return `<!doctype html><html lang="pl"><head><meta charset="utf-8">
@@ -70,7 +72,7 @@ export function layout({ title, user, st, body, flash, active = '', head = '', b
 <link rel="stylesheet" href="/style.css?v=${V}">
 ${head}
 <title>${esc(fullTitle)}</title></head>
-<body class="${user ? 'in' : 'out'} ${bodyClass}">${SPRITE}<div class="stars"></div>${top}<main>${fl}${body}</main>${nav}
+<body class="${user ? 'in' : 'out'} ${bodyClass}" data-now="${Date.now()}">${SPRITE}<div class="stars"></div>${top}<main>${fl}${body}</main>${nav}
 <script src="/app.js?v=${V}" defer></script></body></html>`;
 }
 
@@ -203,7 +205,25 @@ function upgradeCard({ action, icon, name, desc, lvl, max, effect, next, cost, h
   </div>`;
 }
 
-export function colony({ user, st, flash }) {
+/** Nagroda jako „żetony” z ikonami. */
+export function rewardChips(r, size = 18) {
+  const out = [];
+  for (const k of R.RES_KEYS) if (r[k]) out.push(`<span class="chip">${resIcon(k, size)}${fmt(r[k])}</span>`);
+  if (r.xp) out.push(`<span class="chip">${pi('xp', size, 'inl')}${r.xp} XP</span>`);
+  if (r.core) out.push(`<span class="chip rare">${pi('core', size + 4, 'inl')}${Q.CORE.name}</span>`);
+  return `<span class="chips">${out.join('')}</span>`;
+}
+const qIcon = (name, size = 44) => name.startsWith('r_') ? `<img src="/img/${name}.webp?v=${V}" class="pi" width="${size}" height="${size}" alt="">` : pi(name, size);
+
+function colonyCallouts(user, st, now) {
+  const out = [];
+  const ls = Q.loginState(user, now);
+  if (!ls.claimedToday) out.push(`<a class="callout gold" href="/misje">${pi('daily', 48)}<span class="grow"><b>Nagroda dnia czeka!</b><br><small>Dzień ${ls.next}/7 kalendarza logowań${ls.next === 7 ? ' – rzadki Rdzeń kwantowy!' : ''}</small></span>${ic('up', 'chev-r')}</a>`);
+  if ((user.boost_until || 0) > now) out.push(`<div class="callout rare">${pi('core', 48)}<span class="grow"><b>${Q.CORE.name} aktywny</b><br><small>+${R.BOOST_BONUS * 100}% wydobycia jeszcze przez <span data-countdown="${user.boost_until}">${dur(user.boost_until - now)}</span></small></span></div>`);
+  return out.join('');
+}
+
+export function colony({ user, st, flash, now = Date.now() }) {
   const have = { metal: st.stock.metal + st.pending.metal, crystal: st.stock.crystal + st.pending.crystal, energy: st.stock.energy + st.pending.energy };
   const xpPct = Math.round((user.xp / st.xpNeed) * 100);
   const pend = R.RES_KEYS.map((k) => `<div class="pend">
@@ -232,6 +252,7 @@ export function colony({ user, st, flash }) {
       <div class="xp-row">${lvBadge(user.level, 'lg')}<div class="bar xp"><i style="width:${xpPct}%"></i><span>${pi('xp', 22, 'inl')} ${fmt(user.xp)} / ${fmt(st.xpNeed)} XP</span></div></div>
     </div>
   </section>
+  ${colonyCallouts(user, st, now)}
   <section class="card">
     <div class="row"><h3>Magazyn wydobycia</h3><span class="muted small">pojemność: 2 h produkcji</span></div>
     <div class="pends">${pend}</div>
@@ -369,4 +390,59 @@ export function ranking({ user, st, flash, tab, rows, myRank }) {
 
 export function notFound({ user, st }) {
   return layout({ title: 'Nie znaleziono', user, st, body: `<section class="card center"><div class="huge">${ic('hole', 'acc')}</div><h2>Czarna dziura</h2><p>Tej strony nie ma w tym sektorze.</p><a class="btn" href="/">Wróć</a></section>` });
+}
+
+export function missions({ user, st, flash, qs, resetIn, weekIn, now }) {
+  const ls = qs.login;
+  const days = Q.LOGIN_REWARDS.map((r0, i) => {
+    const d = i + 1, r = Q.scale(r0, user.level);
+    const done = d <= ls.doneUpTo, today = !ls.claimedToday && d === ls.next;
+    const main = r.core ? pi('core', 40) : r.metal ? resIcon('metal', 34) : r.crystal ? resIcon('crystal', 34) : resIcon('energy', 34);
+    const amount = r.core ? 'Rdzeń' : fmt(r.metal || r.crystal || r.energy);
+    return `<div class="day${done ? ' done' : ''}${today ? ' today' : ''}${d === 7 ? ' rare' : ''}" title="${esc(Object.entries(r).map(([k, v]) => `${k}: ${v}`).join(', '))}">
+      <small>Dzień ${d}</small>${main}<b>${amount}</b>${done ? `<span class="ok">${ic('check')}</span>` : ''}</div>`;
+  }).join('');
+  const nextR = Q.scale(Q.LOGIN_REWARDS[ls.next - 1], user.level);
+  const claim = ls.claimedToday
+    ? `<button class="btn wide" disabled>${ic('check')} Odebrano – kolejna nagroda za <span data-countdown="${now + resetIn}">${dur(resetIn)}</span></button>`
+    : `<form method="post" action="/misje/logowanie"><button class="btn cta wide">${ic('gift')} Odbierz dzień ${ls.next}</button></form>
+       <div class="center small muted" style="margin-top:6px">W nagrodzie: ${rewardChips(nextR, 16)}</div>`;
+  const qRow = (q) => {
+    const pct = Math.round((q.progress / q.goal) * 100);
+    const btn = q.claimed ? `<span class="q-done">${ic('check')}</span>`
+      : q.done ? `<form method="post" action="/misje/odbierz/${q.id}"><button class="btn sm primary claim">Odbierz</button></form>`
+      : `<span class="q-cnt">${fmt(q.progress)}/${fmt(q.goal)}</span>`;
+    return `<div class="quest${q.claimed ? ' claimed' : q.done ? ' ready' : ''}">${qIcon(q.icon)}
+      <div class="grow"><b>${q.name}</b><div class="prog"><i style="width:${pct}%"></i></div>${rewardChips(q.r, 15)}</div>${btn}</div>`;
+  };
+  const maxPts = Q.CHESTS[Q.CHESTS.length - 1].pts;
+  const chests = qs.chests.map((c) => `<div class="chest t${c.n}${c.claimed ? ' opened' : c.ready ? ' ready' : ''}" style="left:${(c.pts / maxPts) * 100}%">
+      ${pi('chest', 54)}<small>${c.pts} pkt</small></div>`).join('');
+  const chestList = qs.chests.map((c) => `<div class="quest${c.claimed ? ' claimed' : c.ready ? ' ready' : ''}"><span class="chest-ic t${c.n}">${pi('chest', 44)}</span>
+      <div class="grow"><b>${c.name}</b> <small class="muted">· ${c.pts} pkt</small><br>${rewardChips(c.r, 15)}</div>
+      ${c.claimed ? `<span class="q-done">${ic('check')}</span>` : c.ready ? `<form method="post" action="/misje/skrzynia/${c.n}"><button class="btn sm primary claim">Otwórz</button></form>` : `<span class="q-cnt">${ic('lock')}</span>`}</div>`).join('');
+  return layout({ title: 'Misje', user, st, flash, active: 'misje', body: `
+  <section class="card daily-card">
+    <div class="with-ic">${pi('daily', 52)}<div class="grow"><h2 style="margin:0">Nagroda dnia</h2>
+      <small class="muted">Seria: <b>${ls.streak}</b> ${ls.streak === 1 ? 'dzień' : 'dni'} z rzędu · co 7. dzień rzadki przedmiot</small></div></div>
+    ${ls.broken ? '<p class="warn small">Seria przerwana – pominięto dzień, kalendarz zaczyna się od nowa.</p>' : ''}
+    <div class="cal">${days}</div>
+    ${claim}
+  </section>
+  <section class="card">
+    <div class="row"><h3 class="with-ic">${pi('quest', 30)} Misje dzienne</h3><span class="timer">${ic('clock')} <span data-countdown="${now + resetIn}">${dur(resetIn)}</span></span></div>
+    ${qs.daily.map(qRow).join('')}
+    <p class="muted small">Każda misja dzienna: +${Q.POINTS.daily} pkt do skrzyni tygodniowej. Reset o północy (czas polski).</p>
+  </section>
+  <section class="card">
+    <div class="row"><h3 class="with-ic">${pi('chest', 30)} Skrzynia tygodnia</h3><span class="timer">${ic('clock')} ${dur(weekIn)}</span></div>
+    <div class="pts-track"><div class="prog big"><i style="width:${Math.min(100, (qs.points / maxPts) * 100)}%"></i></div>${chests}</div>
+    <p class="center"><b class="pts-big">${qs.points}</b> <span class="muted">/ ${maxPts} pkt misji</span></p>
+    ${chestList}
+  </section>
+  <section class="card">
+    <h3 class="with-ic">${pi('trophy', 30)} Misje tygodniowe</h3>
+    ${qs.weekly.map(qRow).join('')}
+    <p class="muted small">Każda misja tygodniowa: +${Q.POINTS.weekly} pkt. Reset w poniedziałek o północy.</p>
+  </section>` });
 }

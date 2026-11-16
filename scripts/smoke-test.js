@@ -108,7 +108,49 @@ check(r.data.ok && r.data.rows.length >= 2, 'Ranking PvP', `#1 ${r.data.rows[0].
 r = await A.get('/api/ranking?tab=korporacje');
 check(r.data.rows.some((c) => c.id === corpId && c.members === 2), 'Ranking korporacji (2 członków)');
 
-for (const p of ['/kolonia', '/statek', '/bitwa', '/korporacja', '/ranking', '/ranking?tab=pvp', '/ranking?tab=korporacje']) {
+// ---------- Etap 1: nagrody dnia i misje ----------
+const DEV = (await A.post('/api/dev/misja', { ev: 'noop' })).status === 200;
+console.log(DEV ? 'ℹ️  DEV_HOOKS dostępne – pełne testy czasu' : 'ℹ️  Brak DEV_HOOKS (serwer produkcyjny) – testy czasu pominięte');
+let ms = (await A.get('/api/misje')).data;
+check(ms.ok && ms.daily.length === 4 && ms.weekly.length === 4 && ms.chests.length === 3, 'Misje: 4 dzienne, 4 tygodniowe, 3 skrzynie');
+check(ms.login && ms.login.claimedToday === false && ms.login.next === 1, 'Kalendarz logowań: dzień 1 do odebrania');
+r = await A.post('/misje/logowanie');
+check(r.data.ok && r.data.day === 1 && r.data.reward.metal > 0, 'Odbiór nagrody dnia 1', r.data.msg);
+r = await A.post('/misje/logowanie');
+check(!r.data.ok, 'Drugi odbiór tego samego dnia odrzucony', r.data.msg);
+ms = (await A.get('/api/misje')).data;
+const wUpg = ms.weekly.find((q) => q.id === 'w_upg');
+check(wUpg.progress >= 2, 'Postęp misji tygodniowej śledzony na serwerze', `ulepszenia ${wUpg.progress}/${wUpg.goal}`);
+const wWin = ms.weekly.find((q) => q.id === 'w_win');
+check(wWin.progress >= 0 && wWin.progress <= wWin.goal, 'Postęp „wygraj bitwy” zliczany', `${wWin.progress}/${wWin.goal}`);
+r = await A.post('/misje/odbierz/w_pvp');
+check(!r.data.ok, 'Nieukończonej misji nie można odebrać', r.data.msg);
+r = await A.get('/misje', false);
+check(r.status === 200 && r.data.includes('Nagroda dnia') && r.data.includes('Misje dzienne'), 'Strona /misje');
+if (DEV) {
+  for (const ev of ['win', 'upgrade', 'metal', 'pvp']) await A.post('/api/dev/misja', { ev, amount: 9000 });
+  let gained = 0;
+  for (const id of ['w_win', 'w_upg', 'w_metal', 'w_pvp']) { r = await A.post(`/misje/odbierz/${id}`); if (r.data.ok) gained += r.data.points; }
+  check(gained === 100, 'Odbiór 4 misji tygodniowych (+100 pkt)', `${gained} pkt`);
+  r = await A.post('/misje/odbierz/w_win');
+  check(!r.data.ok, 'Podwójny odbiór misji odrzucony');
+  r = await A.post('/misje/skrzynia/1');
+  check(r.data.ok && r.data.reward.metal > 0, 'Skrzynia brązowa (50 pkt) otwarta', r.data.msg);
+  r = await A.post('/misje/skrzynia/2');
+  check(!r.data.ok, 'Skrzynia srebrna zablokowana (120 pkt)', r.data.msg);
+  const dq = ms.daily[0];
+  await A.post('/api/dev/misja', { ev: dq.ev, amount: dq.goal });
+  r = await A.post(`/misje/odbierz/${dq.id}`);
+  check(r.data.ok && r.data.points === 10, `Misja dzienna „${dq.name}” odebrana`, r.data.msg);
+  await A.post('/api/dev/przewin', { minutes: 1440 });
+  r = await A.post('/misje/logowanie');
+  check(r.data.ok && r.data.day === 2, 'Seria logowań: następnego dnia dzień 2', r.data.msg);
+  await A.post('/api/dev/przewin', { minutes: 2880 });
+  r = await A.post('/misje/logowanie');
+  check(r.data.ok && r.data.day === 1, 'Pominięty dzień resetuje serię do dnia 1', r.data.msg);
+}
+
+for (const p of ['/kolonia', '/statek', '/bitwa', '/misje', '/korporacja', '/ranking', '/ranking?tab=pvp', '/ranking?tab=korporacje']) {
   r = await A.get(p, false);
   check(r.status === 200 && r.data.includes('</html>'), `Strona ${p}`);
 }

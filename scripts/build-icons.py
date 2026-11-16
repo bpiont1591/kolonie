@@ -25,3 +25,13 @@ for f in sorted(glob.glob(f'{SRC}/*.jpg')):
     sq = Image.new('RGBA', (S, S), (0, 0, 0, 0)); sq.paste(out, ((S - w) // 2, (S - h) // 2))
     sq.resize((160, 160), Image.LANCZOS).save(f'{OUT}/i_{name}.webp', 'WEBP', quality=84, method=6)
     print(name, os.path.getsize(f'{OUT}/i_{name}.webp'))
+
+# Grafiki v4 (banery / tła) -> WebP
+GEN = f'{ROOT}/art-src/gen'
+for name, w, q in [('expedition_bg', 1100, 66), ('sector_bg', 900, 62), ('boss', 640, 70)]:
+    src = f'{GEN}/{name}.jpg'
+    if os.path.exists(src):
+        im = Image.open(src).convert('RGB')
+        im = im.resize((w, round(im.height * w / im.width)), Image.LANCZOS)
+        im.save(f'{OUT}/{name}.webp', 'WEBP', quality=q, method=6)
+        print(name, os.path.getsize(f'{OUT}/{name}.webp'))

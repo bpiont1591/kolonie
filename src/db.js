@@ -68,6 +68,37 @@ CREATE INDEX IF NOT EXISTS battles_att ON battles(attacker_id, id DESC);
 CREATE INDEX IF NOT EXISTS battles_def ON battles(defender_id, id DESC);
 `;
 
+// Migracje: lista kroków (każdy = lista poleceń SQL), zapisywana w tabeli schema_migrations.
+// Składnia działa w SQLite i Postgresie (INTEGER -> BIGINT i AUTOINCREMENT -> BIGSERIAL podmieniane automatycznie).
+export const MIGRATIONS = [
+  ['001_daily_quests', [
+    'ALTER TABLE users ADD COLUMN login_day INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE users ADD COLUMN login_streak INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE users ADD COLUMN boost_until INTEGER NOT NULL DEFAULT 0',
+    `CREATE TABLE IF NOT EXISTS quest_progress (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      period TEXT NOT NULL,
+      quest_id TEXT NOT NULL,
+      progress INTEGER NOT NULL DEFAULT 0,
+      claimed INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (user_id, period, quest_id)
+    )`,
+  ]],
+];
+
+async function migrate(api, conv = (s) => s) {
+  await api.run('CREATE TABLE IF NOT EXISTS schema_migrations (id TEXT PRIMARY KEY, applied_at ' + conv('INTEGER') + ' NOT NULL)');
+  const done = new Set((await api.all('SELECT id FROM schema_migrations')).map((r) => r.id));
+  for (const [id, stmts] of MIGRATIONS) {
+    if (done.has(id)) continue;
+    await api.tx(async (t) => {
+      for (const sql of stmts) await t.run(conv(sql));
+      await t.run('INSERT INTO schema_migrations (id, applied_at) VALUES (?, ?)', [id, Date.now()]);
+    });
+    console.log(`Migracja ${id} wykonana.`);
+  }
+}
+
 export async function createSqliteDb(file) {
   const { DatabaseSync } = await import('node:sqlite');
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -110,13 +141,15 @@ export async function createSqliteDb(file) {
     return next;
   };
   api.close = () => raw.close();
+  await migrate(api);
   return api;
 }
 
 // ---------------- Postgres / Neon ----------------
-const PG_SCHEMA = SCHEMA
+const pgConv = (sql) => sql
   .replace(/INTEGER PRIMARY KEY AUTOINCREMENT/g, 'BIGSERIAL PRIMARY KEY')
   .replace(/\bINTEGER\b/g, 'BIGINT');
+const PG_SCHEMA = pgConv(SCHEMA);
 
 const toPg = (sql) => { let i = 0; return sql.replace(/\?/g, () => `$${++i}`); };
 
@@ -156,6 +189,7 @@ export async function createPgDb(url) {
     return next;
   };
   api.close = () => pool.end();
+  await migrate(api, pgConv);
   return api;
 }
 

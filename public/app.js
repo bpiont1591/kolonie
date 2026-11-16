@@ -17,6 +17,28 @@
       hp.querySelector('i').style.width = (v / max * 100).toFixed(1) + '%';
     }
   }
+  // Odliczanie (data-countdown = znacznik czasu końca w ms); po dojściu do zera odświeża stronę (np. koniec budowy).
+  const cds = [...document.querySelectorAll('[data-countdown]')];
+  const dur = (ms) => {
+    const s = Math.max(0, Math.ceil(ms / 1000));
+    if (s < 60) return `${s} s`;
+    const m = Math.floor(s / 60);
+    if (m < 60) return `${m} min${s % 60 && m < 10 ? ` ${s % 60} s` : ''}`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h} h${m % 60 ? ` ${m % 60} min` : ''}`;
+    return `${Math.floor(h / 24)} d${h % 24 ? ` ${h % 24} h` : ''}`;
+  };
+  const skew = Date.now() - (+document.body.dataset.now || Date.now());
+  let reloading = false;
+  function cdTick() {
+    const now = Date.now() - skew;
+    for (const el of cds) {
+      const left = +el.dataset.countdown - now;
+      el.textContent = dur(left);
+      if (left <= 0 && el.hasAttribute('data-reload') && !reloading) { reloading = true; setTimeout(() => location.reload(), 800); }
+    }
+  }
+  if (cds.length) setInterval(cdTick, 1000);
   if (res.length || hp) setInterval(tick, 1000);
   document.addEventListener('submit', (e) => {
     const b = e.target.querySelector('button');

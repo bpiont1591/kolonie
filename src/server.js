@@ -6,6 +6,9 @@ import { promisify } from 'node:util';
 import { createDb } from './db.js';
 import * as R from './rules.js';
 import * as V from './views.js';
+import * as G from './game.js';
+import { GameError, fail } from './game.js';
+import registerMissions from './features/missions.js';
 
 const scrypt = promisify(crypto.scrypt);
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -13,8 +16,6 @@ const PORT = Number(process.env.PORT) || 3100;
 const SESSION_DAYS = 30;
 const db = await createDb({ url: process.env.DATABASE_URL, file: process.env.DB_FILE || path.join(ROOT, 'data', 'kolonie.db') });
 
-class GameError extends Error {}
-const fail = (msg) => { throw new GameError(msg); };
 
 // ---------- auth helpers ----------
 async function hashPassword(pw) {
@@ -99,6 +100,7 @@ app.use(async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+const devHooks = []; // dodatkowe przewijanie czasu z modułów
 const wantsJson = (req) => (req.get('accept') || '').includes('application/json');
 function respond(req, res, { ok, msg, redirect, data = {} }) {
   if (wantsJson(req)) return res.status(ok ? 200 : 400).json({ ok, msg, ...data });
@@ -113,7 +115,9 @@ const auth = (req, res, next) => {
 const page = (fn) => async (req, res, next) => {
   try {
     const now = Date.now();
-    const html = await fn(req, now, req.user && V.state(req.user, now));
+    let st;
+    if (req.user) { st = V.state(req.user, now); st.badges = { misje: await G.questBadge(db, req.user, now) }; }
+    const html = await fn(req, now, st);
     if (html === null) return res.status(404).send(V.notFound({ user: req.user, st: V.state(req.user, now) }));
     res.set('Cache-Control', 'no-store').send(html);
   } catch (e) { next(e); }
@@ -212,6 +216,7 @@ app.post('/kolonia/zbierz', auth, action('/kolonia', async (t, u, now) => {
   if (p.metal + p.crystal + p.energy <= 0) fail('Magazyn wydobycia jest pusty – daj dronom chwilę.');
   await t.run('UPDATE users SET metal = metal + ?, crystal = crystal + ?, energy = energy + ?, collected_at = ? WHERE id = ?',
     [p.metal, p.crystal, p.energy, now, u.id]);
+  await G.track(t, u.id, now, { collect: 1, metal: p.metal });
   return { msg: `Zebrano: 🔩${p.metal} 💎${p.crystal} ⚡${p.energy}`, data: { collected: p } };
 }));
 
@@ -224,6 +229,7 @@ app.post('/kolonia/ulepsz/:b', auth, action('/kolonia', async (t, u, now, req) =
   if (!payable(m, c)) fail(`Brakuje surowców. Koszt: ${costText(c)}`);
   await t.run(`UPDATE users SET metal = ?, crystal = ?, energy = ?, collected_at = ?, hp = ?, hp_at = ?, ${def.col} = ${def.col} + 1 WHERE id = ?`,
     [m.metal - c.metal, m.crystal - c.crystal, m.energy - c.energy, now, m.hp, now, u.id]);
+  await G.track(t, u.id, now, { build: 1, upgrade: 1, metal: m.collected.metal });
   return { msg: `${def.name} ulepszona do poziomu ${lvl + 1}!`, data: { building: req.params.b, level: lvl + 1, cost: c } };
 }));
 
@@ -240,6 +246,7 @@ app.post('/statek/ulepsz/:m', auth, action('/statek', async (t, u, now, req) => 
   if (req.params.m === 'hull') hp += 40; // nowe płyty pancerza są w pełni sprawne
   await t.run(`UPDATE users SET metal = metal - ?, crystal = crystal - ?, energy = energy - ?, hp = ?, hp_at = ?, ${def.col} = ${def.col} + 1 WHERE id = ?`,
     [c.metal, c.crystal, c.energy, hp, now, u.id]);
+  await G.track(t, u.id, now, { module: 1, upgrade: 1 });
   return { msg: `${def.name}: poziom ${lvl + 1}!`, data: { module: req.params.m, level: lvl + 1 } };
 }));
 
@@ -294,6 +301,7 @@ app.post('/bitwa/piraci/:tier', auth, action('/bitwa', async (t, u, now, req) =>
   const rw = { ...reward, tier: tier.id, levelUp: lv.levelsGained ? lv.level : 0 };
   const battleId = await t.insert(`INSERT INTO battles (created_at, kind, attacker_id, defender_id, enemy_name, attacker_won, log, reward)
     VALUES (?, 'pve', ?, NULL, ?, ?, ?, ?)`, [now, u.id, tier.name, sim.aWon ? 1 : 0, JSON.stringify(sim.log), JSON.stringify(rw)]);
+  await G.track(t, u.id, now, { pve: 1, win: sim.aWon ? 1 : 0, energy: tier.energy });
   return { msg: sim.aWon ? `Zwycięstwo! +${reward.xp} XP, 🔩${reward.metal} 💎${reward.crystal}` : 'Porażka – piraci okazali się silniejsi.',
     redirect: `/bitwa/${battleId}`, data: { battleId, won: sim.aWon, reward: rw, rounds: sim.rounds } };
 }));
@@ -325,6 +333,7 @@ app.post('/bitwa/gracz/:id', auth, action('/bitwa', async (t, u, now, req) => {
   const rw = { ...reward, levelUp: lv.levelsGained ? lv.level : 0 };
   const battleId = await t.insert(`INSERT INTO battles (created_at, kind, attacker_id, defender_id, enemy_name, attacker_won, log, reward)
     VALUES (?, 'pvp', ?, ?, ?, ?, ?, ?)`, [now, u.id, d.id, d.username, sim.aWon ? 1 : 0, JSON.stringify(sim.log), JSON.stringify(rw)]);
+  await G.track(t, u.id, now, { pvp: 1, win: sim.aWon ? 1 : 0, energy: R.PVP_ENERGY });
   return { msg: sim.aWon ? `Zwycięstwo nad ${d.username}! Łup: 🔩${reward.metal} 💎${reward.crystal}` : `${d.username} odparł Twój atak.`,
     redirect: `/bitwa/${battleId}`, data: { battleId, won: sim.aWon, reward: rw, rounds: sim.rounds } };
 }));
@@ -402,6 +411,28 @@ app.get('/api/ranking', auth, async (req, res, next) => {
     res.json({ ok: true, tab, ...(await rankingData(tab, req.user.id)) });
   } catch (e) { next(e); }
 });
+
+// ---------- moduły funkcji ----------
+const ctx = { devHooks, app, db, auth, page, action, respond, wantsJson, materialize, payable, costText };
+registerMissions(ctx);
+
+// ---------- narzędzia testowe (tylko lokalnie: DEV_HOOKS=1, nigdy na Renderze) ----------
+if (process.env.DEV_HOOKS === '1' && !process.env.RENDER) {
+  console.log('⚠️  DEV_HOOKS włączone – endpointy testowe /api/dev/*');
+  // Przesuwa zegar gracza wstecz o N minut (symulacja upływu czasu).
+  app.post('/api/dev/przewin', auth, action('/', async (t, u, now, req) => {
+    const ms = Math.max(0, Number(req.body.minutes) || 0) * 60_000;
+    const days = Math.floor(ms / 86400_000);
+    await t.run(`UPDATE users SET collected_at = collected_at - ?, hp_at = hp_at - ?, last_battle_at = last_battle_at - ?,
+      protected_until = protected_until - ?, login_day = CASE WHEN login_day > 0 THEN login_day - ? ELSE 0 END WHERE id = ?`, [ms, ms, ms, ms, days, u.id]);
+    for (const h of devHooks) await h(t, u, ms);
+    return { msg: 'Przewinięto czas.' };
+  }));
+  app.post('/api/dev/misja', auth, action('/', async (t, u, now, req) => {
+    await G.track(t, u.id, now, { [String(req.body.ev)]: Number(req.body.amount) || 1 });
+    return { msg: 'ok' };
+  }));
+}
 
 // ---------- health / 404 / błędy ----------
 app.get('/healthz', async (req, res) => { try { await db.get('SELECT 1 AS ok'); res.json({ ok: true, db: db.kind }); } catch { res.status(503).json({ ok: false }); } });
