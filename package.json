@@ -1,0 +1,19 @@
+{
+  "name": "kolonie",
+  "version": "0.1.0",
+  "description": "Kolonie – mobilna przeglądarkowa gra MMORPG sci-fi (prototyp MVP)",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/server.js",
+    "dev": "node --watch --disable-warning=ExperimentalWarning src/server.js",
+    "test": "node scripts/smoke-test.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "pg": "^8.23.1"
+  }
+}
