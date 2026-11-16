@@ -76,3 +76,56 @@ export async function questBadge(db, u, now) {
   const s = await questState(db, u, now);
   return s.claimable;
 }
+
+// ---------- Etap 2: kolejki budowy i ekspedycje (kończone „przy odczycie”, bez crona) ----------
+export const isDue = (u, now) => !!((u.bq_id && u.bq_until <= now) || (u.mq_id && u.mq_until <= now) || (u.ex_until && u.ex_until <= now));
+const SETTLE_COLS = ['metal', 'crystal', 'energy', 'collected_at', 'hp', 'hp_at', 'b_mine', 'b_power', 'b_shipyard', 'b_lab',
+  's_hull', 's_guns', 's_shields', 'bq_id', 'bq_until', 'mq_id', 'mq_until', 'ex_until', 'level', 'xp', 'boost_until'];
+
+/** Kończy zaległe budowy/ekspedycje (w kolejności czasu). Zwraca zaktualizowanego gracza i listę zdarzeń. */
+export async function settle(t, u, now) {
+  if (!isDue(u, now)) return { u, done: [] };
+  const evs = [];
+  if (u.bq_id && u.bq_until <= now) evs.push(['b', u.bq_until]);
+  if (u.mq_id && u.mq_until <= now) evs.push(['m', u.mq_until]);
+  if (u.ex_until && u.ex_until <= now) evs.push(['e', u.ex_until]);
+  evs.sort((a, b) => a[1] - b[1]);
+  let c = { ...u };
+  const done = [];
+  const collectAt = (at) => {
+    const p = R.pending(c, at);
+    c = { ...c, metal: c.metal + p.metal, crystal: c.crystal + p.crystal, energy: c.energy + p.energy, collected_at: Math.max(c.collected_at, at),
+      hp: R.currentHp(c, at), hp_at: Math.max(c.hp_at, at) };
+  };
+  for (const [k, at] of evs) {
+    if (k === 'b') {
+      const def = R.BUILDINGS[c.bq_id];
+      collectAt(at); // produkcja do chwili ukończenia liczona po staremu
+      if (def) { c[def.col] += 1; done.push({ kind: 'building', id: c.bq_id, name: def.name, level: c[def.col], at }); }
+      c.bq_id = null; c.bq_until = 0;
+    } else if (k === 'm') {
+      const def = R.MODULES[c.mq_id];
+      c.hp = R.currentHp(c, at); c.hp_at = Math.max(c.hp_at, at);
+      if (def) { c[def.col] += 1; if (c.mq_id === 'hull') c.hp += 40; done.push({ kind: 'module', id: c.mq_id, name: def.name, level: c[def.col], at }); }
+      c.mq_id = null; c.mq_until = 0;
+    } else {
+      const ex = await t.get("SELECT * FROM expeditions WHERE user_id = ? AND status = 'active' ORDER BY id DESC LIMIT 1", [c.id]);
+      c.ex_until = 0;
+      if (!ex) continue;
+      const kind = R.EXPEDITIONS[ex.kind] || R.EXPEDITIONS.zwiad;
+      const res = R.expeditionResult(kind, c.level, R.labBonus(c));
+      collectAt(at);
+      const maxHp = R.shipStats(c).maxHp;
+      c.hp = Math.max(1, Math.round(c.hp - res.dmg * maxHp)); c.hp_at = Math.max(c.hp_at, at);
+      c.metal += res.loot.metal; c.crystal += res.loot.crystal; c.energy += res.loot.energy;
+      const lv = R.addXp(c.level, c.xp, res.loot.xp);
+      if (lv.levelsGained) { c.hp = R.shipStats({ ...c, level: lv.level }).maxHp; res.levelUp = lv.level; }
+      c.level = lv.level; c.xp = lv.xp;
+      if (res.loot.core) c.boost_until = Math.max(at, c.boost_until || 0) + Q.CORE.hours * 3600_000;
+      await t.run("UPDATE expeditions SET status = 'done', result = ? WHERE id = ?", [JSON.stringify(res), ex.id]);
+      done.push({ kind: 'expedition', id: ex.id, name: kind.name, at, title: res.title });
+    }
+  }
+  await t.run(`UPDATE users SET ${SETTLE_COLS.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`, [...SETTLE_COLS.map((k) => c[k]), c.id]);
+  return { u: c, done };
+}

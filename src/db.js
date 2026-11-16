@@ -84,6 +84,23 @@ export const MIGRATIONS = [
       PRIMARY KEY (user_id, period, quest_id)
     )`,
   ]],
+  ['002_queues_expeditions', [
+    'ALTER TABLE users ADD COLUMN bq_id TEXT',
+    'ALTER TABLE users ADD COLUMN bq_until INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE users ADD COLUMN mq_id TEXT',
+    'ALTER TABLE users ADD COLUMN mq_until INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE users ADD COLUMN ex_until INTEGER NOT NULL DEFAULT 0',
+    `CREATE TABLE IF NOT EXISTS expeditions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL,
+      started_at INTEGER NOT NULL,
+      return_at INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      result TEXT NOT NULL DEFAULT '{}'
+    )`,
+    'CREATE INDEX IF NOT EXISTS expeditions_user ON expeditions(user_id, id DESC)',
+  ]],
 ];
 
 async function migrate(api, conv = (s) => s) {

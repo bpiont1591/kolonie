@@ -312,3 +312,25 @@ body.landing main>.flash{position:fixed;top:10px;left:0;right:0;z-index:20}
 .chest.t1:not(.ready) .pi,.chest.t2:not(.ready) .pi,.chest.t3:not(.ready) .pi{filter:grayscale(.9) brightness(.55)}
 .pts-big{font:700 1.6rem "Rajdhani",sans-serif;color:var(--warn)}
 .with-ic .grow{min-width:0}
+
+/* ===== v4 etap 2: kolejka budowy i ekspedycje ===== */
+.upg.building{border-color:rgba(255,196,77,.45);background:linear-gradient(180deg,rgba(255,196,77,.08),rgba(0,0,0,.18));box-shadow:0 0 18px rgba(255,170,60,.08)}
+.upg .arrow{color:var(--mut)}.upg-name .nx{color:var(--warn)}
+.bq-line{display:flex;flex-wrap:wrap;align-items:center;gap:4px;font-size:.82rem;color:#ffe2a8;margin-top:4px}
+.prog.build i{background:linear-gradient(90deg,#c47a12,#ffc44d);box-shadow:0 0 8px rgba(255,196,77,.6);transition:width 1s linear}
+.spin{animation:hg 3s ease-in-out infinite}@keyframes hg{0%,40%{transform:rotate(0)}50%,90%{transform:rotate(180deg)}100%{transform:rotate(360deg)}}
+.btn-up.rush{background:linear-gradient(180deg,#d9b8ff,#9a5cff 55%,#6430c4);border-color:rgba(220,190,255,.6);color:#fff;box-shadow:0 4px 16px rgba(150,90,255,.4),inset 0 1px 0 rgba(255,255,255,.6)}
+.btn-up.rush .ri{width:22px;height:22px;margin:0}
+.btn-up.rush span{font-size:.85rem}
+.cost.time{color:#ffe2a8}.cost.time .gi{width:13px;height:13px;margin-left:2px}
+.callout.exp{border-color:rgba(62,230,255,.4);background:linear-gradient(90deg,rgba(62,230,255,.14),rgba(18,26,56,.8))}
+.exp-banner{min-height:170px;display:flex;flex-direction:column;justify-content:flex-end}
+.exp-banner h2,.exp-banner p{text-shadow:0 2px 10px #000;margin:0 0 4px}
+.exp-opt{display:flex;align-items:center;gap:11px;padding:11px 10px;margin:9px 0;border-radius:14px;background:rgba(0,0,0,.22);border:1px solid var(--line)}
+.exp-h{flex:none;width:52px;height:52px;display:grid;place-items:center;border-radius:14px;font:700 1.25rem "Rajdhani",sans-serif;color:#eaffff;
+  background:radial-gradient(circle at 50% 35%,rgba(62,230,255,.35),rgba(5,10,28,.9) 70%);border:1px solid rgba(62,230,255,.45);text-shadow:0 0 8px rgba(62,230,255,.9)}
+.exp-opt.h4 .exp-h{background:radial-gradient(circle at 50% 35%,rgba(170,90,255,.4),rgba(5,10,28,.9) 70%);border-color:rgba(180,110,255,.5)}
+.exp-opt.h8 .exp-h{background:radial-gradient(circle at 50% 35%,rgba(255,150,50,.4),rgba(5,10,28,.9) 70%);border-color:rgba(255,170,80,.55)}
+.exp-active{border-color:rgba(62,230,255,.45);box-shadow:0 0 24px rgba(62,230,255,.12)}
+.bar.exp-bar i{background:linear-gradient(90deg,#127aa3,#3ee6ff);transition:width 1s linear}
+.float{animation:float 4s ease-in-out infinite}

@@ -63,15 +63,22 @@ r = await A.post('/kolonia/zbierz');
 check(!r.data.ok, 'Ponowne zbieranie od razu – pusty magazyn', r.data.msg);
 
 r = await A.post('/kolonia/ulepsz/mine');
-check(r.data.ok && r.data.level === 2, 'Ulepszenie kopalni do poz. 2', r.data.msg);
+check(r.data.ok && r.data.level === 2 && r.data.seconds > 0, 'Budowa kopalni poz. 2 rozpoczęta (kolejka)', r.data.msg);
+r = await A.post('/kolonia/ulepsz/power');
+check(!r.data.ok, 'Kolejka budynków: tylko jedna budowa naraz', r.data.msg);
 r = await A.post('/kolonia/ulepsz/nieistnieje');
 check(!r.data.ok, 'Nieznany budynek odrzucony');
 r = await A.post('/statek/ulepsz/guns');
-check(r.data.ok && r.data.level === 2, 'Ulepszenie dział do poz. 2', r.data.msg);
+check(r.data.ok && r.data.level === 2 && r.data.seconds > 0, 'Montaż dział poz. 2 rozpoczęty (osobna kolejka stoczni)', r.data.msg);
+r = await A.post('/statek/ulepsz/hull');
+check(!r.data.ok, 'Kolejka modułów: jeden moduł naraz', r.data.msg);
+st = (await A.get('/api/stan')).data;
+check(st.user.b_mine === 1 && st.user.bq_id === 'mine', 'Poziom rośnie dopiero po ukończeniu budowy');
+await sleep(9000);
+st = (await A.get('/api/stan')).data;
+check(st.user.b_mine === 2 && st.user.s_guns === 2 && !st.user.bq_id && !st.user.mq_id, 'Budowy ukończone przy odczycie (bez crona)', `atak=${st.ship.atk}`);
 r = await A.post('/statek/ulepsz/guns');
 check(!r.data.ok, 'Limit stoczni blokuje poz. 3', r.data.msg);
-st = (await A.get('/api/stan')).data;
-check(st.user.b_mine === 2 && st.user.s_guns === 2, 'Stan po ulepszeniach zapisany na serwerze', `atak=${st.ship.atk}`);
 
 r = await A.post('/bitwa/piraci/zwiadowca');
 check(r.data.ok && r.data.battleId > 0, 'Bitwa z piratami (PvE)', `${r.data.won ? 'wygrana' : 'przegrana'} w ${r.data.rounds} rundach, nagroda ${JSON.stringify(r.data.reward)}`);
@@ -112,7 +119,7 @@ check(r.data.rows.some((c) => c.id === corpId && c.members === 2), 'Ranking korp
 const DEV = (await A.post('/api/dev/misja', { ev: 'noop' })).status === 200;
 console.log(DEV ? 'ℹ️  DEV_HOOKS dostępne – pełne testy czasu' : 'ℹ️  Brak DEV_HOOKS (serwer produkcyjny) – testy czasu pominięte');
 let ms = (await A.get('/api/misje')).data;
-check(ms.ok && ms.daily.length === 4 && ms.weekly.length === 4 && ms.chests.length === 3, 'Misje: 4 dzienne, 4 tygodniowe, 3 skrzynie');
+check(ms.ok && ms.daily.length === 4 && ms.weekly.length === 5 && ms.chests.length === 3, 'Misje: 4 dzienne, 5 tygodniowych, 3 skrzynie');
 check(ms.login && ms.login.claimedToday === false && ms.login.next === 1, 'Kalendarz logowań: dzień 1 do odebrania');
 r = await A.post('/misje/logowanie');
 check(r.data.ok && r.data.day === 1 && r.data.reward.metal > 0, 'Odbiór nagrody dnia 1', r.data.msg);
@@ -149,6 +156,41 @@ if (DEV) {
   r = await A.post('/misje/logowanie');
   check(r.data.ok && r.data.day === 1, 'Pominięty dzień resetuje serię do dnia 1', r.data.msg);
 }
+
+// ---------- Etap 2: przyspieszanie budowy i ekspedycje ----------
+st = (await A.get('/api/stan')).data;
+r = await A.post('/kolonia/ulepsz/power');
+check(r.data.ok && r.data.level === 2, 'Budowa elektrowni rozpoczęta', r.data.msg);
+r = await A.post('/kolonia/przyspiesz');
+const st2 = (await A.get('/api/stan')).data;
+check(r.data.ok && r.data.level === 2 && st2.user.b_power === 2, 'Natychmiastowe ukończenie za kryształy', r.data.msg);
+r = await B.post('/ekspedycje/wyslij/zwiad');
+check(r.data.ok && r.data.until > Date.now(), 'Wysłanie ekspedycji 1 h', r.data.msg);
+r = await B.post('/ekspedycje/wyslij/zwiad');
+check(!r.data.ok, 'Druga ekspedycja w trakcie odrzucona', r.data.msg);
+r = await B.post('/bitwa/piraci/zwiadowca');
+check(!r.data.ok && /ekspedycji/.test(r.data.msg), 'Statek na ekspedycji nie może walczyć', r.data.msg);
+r = await B.post('/ekspedycje/zawroc');
+check(r.data.ok, 'Zawrócenie statku z ekspedycji', r.data.msg);
+let ex = (await B.get('/api/ekspedycje')).data;
+check(ex.rows[0].status === 'recalled' && ex.ex_until === 0, 'Ekspedycja odwołana, statek w bazie');
+r = await B.post('/ekspedycje/wyslij/zwiad');
+check(r.data.ok, 'Ponowne wysłanie ekspedycji', r.data.msg);
+if (DEV) {
+  await B.post('/api/dev/przewin', { minutes: 61 });
+  ex = (await B.get('/api/ekspedycje')).data;
+  const res = ex.rows[0].result;
+  check(ex.rows[0].status === 'done' && ex.ex_until === 0 && res.loot.metal > 0, 'Powrót ekspedycji: losowe zdarzenie i łup', `${res.title}: metal ${res.loot.metal}, kryształy ${res.loot.crystal}, obrażenia ${Math.round(res.dmg * 100)}%`);
+  r = await B.get(`/ekspedycje/${ex.rows[0].id}`, false);
+  check(r.status === 200 && r.data.includes(res.title), 'Raport z ekspedycji (HTML)');
+  r = await A.get(`/ekspedycje/${ex.rows[0].id}`, false);
+  check(r.status === 404, 'Cudzy raport ekspedycji niedostępny');
+} else {
+  r = await B.post('/ekspedycje/zawroc');
+  check(r.data.ok, 'Sprzątanie: zawrócenie testowej ekspedycji');
+}
+r = await B.get('/ekspedycje', false);
+check(r.status === 200 && r.data.includes('Ekspedycje'), 'Strona /ekspedycje');
 
 for (const p of ['/kolonia', '/statek', '/bitwa', '/misje', '/korporacja', '/ranking', '/ranking?tab=pvp', '/ranking?tab=korporacje']) {
   r = await A.get(p, false);

@@ -9,6 +9,8 @@ import * as V from './views.js';
 import * as G from './game.js';
 import { GameError, fail } from './game.js';
 import registerMissions from './features/missions.js';
+import registerExpeditions from './features/expeditions.js';
+import { dur } from './time.js';
 
 const scrypt = promisify(crypto.scrypt);
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -91,6 +93,12 @@ app.use(async (req, res, next) => {
     if (sid) {
       const s = await db.get('SELECT user_id, expires_at FROM sessions WHERE token_hash = ?', [sha(sid)]);
       if (s && s.expires_at > Date.now()) req.user = await db.get('SELECT * FROM users WHERE id = ?', [s.user_id]);
+      // kończenie zaległych budów/ekspedycji przy odczycie (bez crona)
+      if (req.user && G.isDue(req.user, Date.now())) {
+        const done = await db.tx(async (t) => (await G.settle(t, await t.get('SELECT * FROM users WHERE id = ?', [s.user_id]), Date.now())).done);
+        req.user = await db.get('SELECT * FROM users WHERE id = ?', [s.user_id]);
+        onSettled(req.user, done);
+      }
     }
     if (req.cookiesObj.flash) {
       try { req.flash = JSON.parse(req.cookiesObj.flash); } catch { /* ignore */ }
@@ -100,7 +108,9 @@ app.use(async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-const devHooks = []; // dodatkowe przewijanie czasu z modułów
+const devHooks = [];
+const settledHooks = []; // powiadomienia o zakończonych budowach/ekspedycjach (etap 4)
+const onSettled = (u, done) => { for (const h of settledHooks) Promise.resolve(h(u, done)).catch((e) => console.error('settledHook', e.message)); }; // dodatkowe przewijanie czasu z modułów
 const wantsJson = (req) => (req.get('accept') || '').includes('application/json');
 function respond(req, res, { ok, msg, redirect, data = {} }) {
   if (wantsJson(req)) return res.status(ok ? 200 : 400).json({ ok, msg, ...data });
@@ -126,8 +136,10 @@ const page = (fn) => async (req, res, next) => {
 const action = (redirect, fn) => async (req, res, next) => {
   try {
     const out = await db.tx(async (t) => {
-      const u = await t.get('SELECT * FROM users WHERE id = ?', [req.user.id]);
-      return fn(t, u, Date.now(), req);
+      const now = Date.now();
+      const sres = await G.settle(t, await t.get('SELECT * FROM users WHERE id = ?', [req.user.id]), now);
+      if (sres.done.length) onSettled(sres.u, sres.done);
+      return fn(t, sres.u, now, req);
     });
     respond(req, res, { ok: true, msg: out.msg, redirect: out.redirect || redirect, data: out.data });
   } catch (e) {
@@ -224,13 +236,15 @@ app.post('/kolonia/ulepsz/:b', auth, action('/kolonia', async (t, u, now, req) =
   const def = Object.hasOwn(R.BUILDINGS, req.params.b) ? R.BUILDINGS[req.params.b] : fail('Nieznany budynek.');
   const lvl = u[def.col];
   if (lvl >= R.MAX_LEVEL_BUILDING) fail('Osiągnięto maksymalny poziom.');
+  if (u.bq_id) fail(`Trwa już budowa: ${R.BUILDINGS[u.bq_id]?.name}. Poczekaj albo przyspiesz.`);
   const m = materialize(u, now);
   const c = R.upgradeCost(def, lvl);
   if (!payable(m, c)) fail(`Brakuje surowców. Koszt: ${costText(c)}`);
-  await t.run(`UPDATE users SET metal = ?, crystal = ?, energy = ?, collected_at = ?, hp = ?, hp_at = ?, ${def.col} = ${def.col} + 1 WHERE id = ?`,
-    [m.metal - c.metal, m.crystal - c.crystal, m.energy - c.energy, now, m.hp, now, u.id]);
+  const secs = R.buildTime(lvl);
+  await t.run(`UPDATE users SET metal = ?, crystal = ?, energy = ?, collected_at = ?, hp = ?, hp_at = ?, bq_id = ?, bq_until = ? WHERE id = ?`,
+    [m.metal - c.metal, m.crystal - c.crystal, m.energy - c.energy, now, m.hp, now, req.params.b, now + secs * 1000, u.id]);
   await G.track(t, u.id, now, { build: 1, upgrade: 1, metal: m.collected.metal });
-  return { msg: `${def.name} ulepszona do poziomu ${lvl + 1}!`, data: { building: req.params.b, level: lvl + 1, cost: c } };
+  return { msg: `${def.name}: budowa poziomu ${lvl + 1} rozpoczęta (${dur(secs * 1000)}).`, data: { building: req.params.b, level: lvl + 1, cost: c, seconds: secs, until: now + secs * 1000 } };
 }));
 
 // ---------- statek ----------
@@ -240,15 +254,30 @@ app.post('/statek/ulepsz/:m', auth, action('/statek', async (t, u, now, req) => 
   const def = Object.hasOwn(R.MODULES, req.params.m) ? R.MODULES[req.params.m] : fail('Nieznany moduł.');
   const lvl = u[def.col];
   if (lvl >= R.moduleCap(u)) fail('Limit stoczni! Ulepsz stocznię, by rozbudować moduł.');
+  if (u.mq_id) fail(`W stoczni trwają już prace: ${R.MODULES[u.mq_id]?.name}. Poczekaj albo przyspiesz.`);
   const c = R.upgradeCost(def, lvl);
   if (!payable(u, c)) fail(`Brakuje surowców w magazynie. Koszt: ${costText(c)}`);
-  let hp = R.currentHp(u, now);
-  if (req.params.m === 'hull') hp += 40; // nowe płyty pancerza są w pełni sprawne
-  await t.run(`UPDATE users SET metal = metal - ?, crystal = crystal - ?, energy = energy - ?, hp = ?, hp_at = ?, ${def.col} = ${def.col} + 1 WHERE id = ?`,
-    [c.metal, c.crystal, c.energy, hp, now, u.id]);
+  const secs = R.moduleTime(lvl);
+  await t.run('UPDATE users SET metal = metal - ?, crystal = crystal - ?, energy = energy - ?, mq_id = ?, mq_until = ? WHERE id = ?',
+    [c.metal, c.crystal, c.energy, req.params.m, now + secs * 1000, u.id]);
   await G.track(t, u.id, now, { module: 1, upgrade: 1 });
-  return { msg: `${def.name}: poziom ${lvl + 1}!`, data: { module: req.params.m, level: lvl + 1 } };
+  return { msg: `${def.name}: montaż poziomu ${lvl + 1} rozpoczęty (${dur(secs * 1000)}).`, data: { module: req.params.m, level: lvl + 1, seconds: secs, until: now + secs * 1000 } };
 }));
+
+// Natychmiastowe ukończenie za kryształy
+for (const [path, q, back] of [['/kolonia/przyspiesz', 'bq', '/kolonia'], ['/statek/przyspiesz', 'mq', '/statek']]) {
+  app.post(path, auth, action(back, async (t, u, now) => {
+    if (!u[`${q}_id`]) fail('Nic się teraz nie buduje.');
+    const left = u[`${q}_until`] - now;
+    const cost = R.rushCost(left);
+    if (u.crystal < cost) fail(`Za mało kryształów (potrzeba 💎${cost}).`);
+    await t.run(`UPDATE users SET crystal = crystal - ?, ${q}_until = ? WHERE id = ?`, [cost, now, u.id]);
+    const res = await G.settle(t, { ...u, crystal: u.crystal - cost, [`${q}_until`]: now }, now);
+    onSettled(res.u, res.done);
+    const d = res.done.find((x) => x.kind === (q === 'bq' ? 'building' : 'module'));
+    return { msg: `Ukończono za 💎${cost}: ${d?.name} – poziom ${d?.level}!`, data: { cost, level: d?.level } };
+  }));
+}
 
 // ---------- bitwy ----------
 async function battleTargets(u, now) {
@@ -275,6 +304,7 @@ app.get('/bitwa/:id', auth, page(async (req, now, st) => {
 }));
 
 function preBattle(u, now, energyCost) {
+  if (u.ex_until > now) fail(`Statek jest na ekspedycji – wróci za ${dur(u.ex_until - now)}.`);
   const ship = R.shipStats(u);
   const hp = R.currentHp(u, now);
   if (now - u.last_battle_at < R.BATTLE_COOLDOWN_MS) fail('Działa się chłodzą – odczekaj kilka sekund.');
@@ -307,7 +337,8 @@ app.post('/bitwa/piraci/:tier', auth, action('/bitwa', async (t, u, now, req) =>
 }));
 
 app.post('/bitwa/gracz/:id', auth, action('/bitwa', async (t, u, now, req) => {
-  const d = await t.get('SELECT * FROM users WHERE id = ?', [Number(req.params.id) || 0]) || fail('Nie ma takiego gracza.');
+  let d = await t.get('SELECT * FROM users WHERE id = ?', [Number(req.params.id) || 0]) || fail('Nie ma takiego gracza.');
+  d = (await G.settle(t, d, now)).u;
   if (d.id === u.id) fail('Nie możesz zaatakować samego siebie.');
   if (d.level < u.level - 2) fail('Ten gracz jest za słaby – honor komandora na to nie pozwala.');
   if (d.protected_until > now) fail('Ten gracz jest pod ochroną tarczy planetarnej.');
@@ -413,8 +444,9 @@ app.get('/api/ranking', auth, async (req, res, next) => {
 });
 
 // ---------- moduły funkcji ----------
-const ctx = { devHooks, app, db, auth, page, action, respond, wantsJson, materialize, payable, costText };
+const ctx = { settledHooks, devHooks, app, db, auth, page, action, respond, wantsJson, materialize, payable, costText };
 registerMissions(ctx);
+registerExpeditions(ctx);
 
 // ---------- narzędzia testowe (tylko lokalnie: DEV_HOOKS=1, nigdy na Renderze) ----------
 if (process.env.DEV_HOOKS === '1' && !process.env.RENDER) {
@@ -425,6 +457,9 @@ if (process.env.DEV_HOOKS === '1' && !process.env.RENDER) {
     const days = Math.floor(ms / 86400_000);
     await t.run(`UPDATE users SET collected_at = collected_at - ?, hp_at = hp_at - ?, last_battle_at = last_battle_at - ?,
       protected_until = protected_until - ?, login_day = CASE WHEN login_day > 0 THEN login_day - ? ELSE 0 END WHERE id = ?`, [ms, ms, ms, ms, days, u.id]);
+    await t.run(`UPDATE users SET bq_until = CASE WHEN bq_until > 0 THEN bq_until - ? ELSE 0 END, mq_until = CASE WHEN mq_until > 0 THEN mq_until - ? ELSE 0 END,
+      ex_until = CASE WHEN ex_until > 0 THEN ex_until - ? ELSE 0 END, boost_until = CASE WHEN boost_until > 0 THEN boost_until - ? ELSE 0 END WHERE id = ?`, [ms, ms, ms, ms, u.id]);
+    await t.run("UPDATE expeditions SET started_at = started_at - ?, return_at = return_at - ? WHERE user_id = ? AND status = 'active'", [ms, ms, u.id]);
     for (const h of devHooks) await h(t, u, ms);
     return { msg: 'Przewinięto czas.' };
   }));

@@ -186,11 +186,26 @@ export function landing({ online, players, battles24, top, flash, baseUrl }) {
 }
 
 /** Karta ulepszenia: ikona + plakietka poziomu, efekt (teraz → dalej), postęp do maks., koszt, przycisk z szewronem. */
-function upgradeCard({ action, icon, name, desc, lvl, max, effect, next, cost, have, block }) {
+function upgradeCard({ action, icon, name, desc, lvl, max, effect, next, cost, have, block, secs, building, busy, rushAction, now }) {
   const afford = canPay(have, cost);
-  const ok = !block && afford;
+  const ok = !block && !busy && !building && afford;
   const pct = Math.min(100, Math.round((lvl / max) * 100));
+  if (building) {
+    const left = Math.max(0, building.until - now), rc = R.rushCost(left);
+    const bp = Math.min(100, Math.max(2, Math.round((1 - left / (building.total * 1000)) * 100)));
+    return `<div class="upg building">
+    <div class="upg-ic">${icon}${lvBadge(lvl, 'corner')}</div>
+    <div class="upg-body">
+      <div class="upg-name">${name} <span class="arrow">→</span> <span class="nx">poz. ${lvl + 1}</span></div>
+      <div class="bq-line">${pi('timer', 22, 'inl spin')} W budowie · zostało <b data-countdown="${building.until}" data-reload>${dur(left)}</b></div>
+      <div class="prog build"><i style="width:${bp}%" data-bar-from="${building.until - building.total * 1000}" data-bar-to="${building.until}"></i></div>
+      <div class="upg-foot"><span class="lvtext">po ukończeniu: ${next || effect}</span></div>
+    </div>
+    <form method="post" action="${rushAction}"><button class="btn-up rush" title="Ukończ natychmiast za ${rc} kryształów" ${have.crystal >= rc ? '' : 'disabled'}>${resIcon('crystal', 22)}<span>${fmt(rc)}</span></button></form>
+  </div>`;
+  }
   const btn = block ? `<button class="btn-up is-max" disabled title="${esc(block.why)}">${ic('lock')}<span>${block.label}</span></button>`
+    : busy ? `<button class="btn-up is-off" disabled title="Kolejka zajęta: ${esc(busy)}">${ic('clock')}<span>Zajęte</span></button>`
     : `<button class="btn-up${ok ? '' : ' is-off'}" ${ok ? '' : 'disabled'} title="${ok ? `Ulepsz do poziomu ${lvl + 1}` : 'Za mało surowców'}">${ic('up')}<span>${ok ? 'Ulepsz' : 'Brak'}</span></button>`;
   return `<div class="upg${ok ? ' ready' : ''}">
     <div class="upg-ic">${icon}${lvBadge(lvl, 'corner')}</div>
@@ -199,7 +214,7 @@ function upgradeCard({ action, icon, name, desc, lvl, max, effect, next, cost, h
       <div class="muted small">${desc}</div>
       <div class="eff">${effect}${next ? ` <span class="arrow">→</span> <span class="nx">${next}</span>` : ''}</div>
       <div class="prog" title="Poziom ${lvl} z ${max}"><i style="width:${pct}%"></i></div>
-      <div class="upg-foot"><span class="lvtext">poz. <b>${lvl}</b>/${max}</span>${block ? `<span class="warn small">${esc(block.why)}</span>` : `<span class="costs">${costHtml(cost, have)}</span>`}</div>
+      <div class="upg-foot"><span class="lvtext">poz. <b>${lvl}</b>/${max}</span>${block ? `<span class="warn small">${esc(block.why)}</span>` : `<span class="costs">${costHtml(cost, have)}<span class="cost time">${ic('clock')}${dur(secs * 1000)}</span></span>`}</div>
     </div>
     <form method="post" action="${action}">${btn}</form>
   </div>`;
@@ -214,6 +229,68 @@ export function rewardChips(r, size = 18) {
   return `<span class="chips">${out.join('')}</span>`;
 }
 const qIcon = (name, size = 44) => name.startsWith('r_') ? `<img src="/img/${name}.webp?v=${V}" class="pi" width="${size}" height="${size}" alt="">` : pi(name, size);
+
+function expeditionCallout(user, now) {
+  if (user.ex_until > now) return `<a class="callout exp" href="/ekspedycje">${pi('expedition', 48)}<span class="grow"><b>Statek na ekspedycji</b><br><small>Powrót za <span data-countdown="${user.ex_until}" data-reload>${dur(user.ex_until - now)}</span></small></span>${ic('up', 'chev-r')}</a>`;
+  return `<a class="callout exp" href="/ekspedycje">${pi('expedition', 48)}<span class="grow"><b>Ekspedycje</b><br><small>Wyślij statek po łupy: 1 h, 4 h lub 8 h</small></span>${ic('up', 'chev-r')}</a>`;
+}
+
+const EX_EVENT_ICON = { calm: 'collect', wreck: 'treasury', pirates: 'defeat', storm: 'shields', artifact: 'core', empty: 'timer', recalled: 'timer' };
+export function expeditions({ user, st, flash, rows, now }) {
+  const active = rows.find((r) => r.status === 'active' && user.ex_until > now);
+  const minHp = Math.ceil(st.ship.maxHp * R.EXPEDITION_MIN_HP);
+  const kinds = Object.values(R.EXPEDITIONS).map((k) => {
+    const can = !active && st.ship.hp >= minHp && st.stock.energy >= k.energy;
+    const est = Math.round((60 + 25 * user.level) * k.h), estC = Math.round((25 + 10 * user.level) * k.h);
+    return `<div class="exp-opt h${k.h}">
+      <div class="exp-h">${k.h} h</div>
+      <div class="grow"><b>${k.name}</b><div class="muted small">${k.desc}</div>
+        <div class="chips"><span class="chip">${resIcon('metal', 15)}~${fmt(est)}</span><span class="chip">${resIcon('crystal', 15)}~${fmt(estC)}</span>${k.h >= 8 ? `<span class="chip rare">${pi('core', 18, 'inl')}szansa</span>` : ''}</div></div>
+      <form method="post" action="/ekspedycje/wyslij/${k.id}"><button class="btn sm ${can ? 'primary' : ''}" ${can ? '' : 'disabled'}>${ic('ship')}<span class="en">${resIcon('energy', 16)}${k.energy}</span></button></form></div>`;
+  }).join('');
+  const act = active ? (() => {
+    const total = active.return_at - active.started_at, left = active.return_at - now;
+    const pct = Math.min(100, Math.max(2, Math.round((1 - left / total) * 100)));
+    const k = R.EXPEDITIONS[active.kind];
+    return `<section class="card exp-active">
+      <div class="with-ic">${pi('expedition', 56, 'float')}<div class="grow"><h3 style="margin:0">${k.name}</h3><small class="muted">Statek w drodze · bitwy niedostępne</small></div></div>
+      <div class="bar exp-bar"><i style="width:${pct}%" data-bar-from="${active.started_at}" data-bar-to="${active.return_at}"></i><span>Powrót za <b data-countdown="${active.return_at}" data-reload>${dur(left)}</b></span></div>
+      <form method="post" action="/ekspedycje/zawroc" onsubmit="return confirm('Zawrócić statek? Ekspedycja przepadnie bez łupów.')"><button class="btn sm wide">${ic('logout', 'flip')} Zawróć statek (bez łupów)</button></form>
+    </section>`;
+  })() : '';
+  const hist = rows.filter((r) => r.status !== 'active');
+  const histHtml = hist.length ? hist.map((r) => {
+    const res = JSON.parse(r.result);
+    return `<a class="item link" href="/ekspedycje/${r.id}">${pi(EX_EVENT_ICON[res.event] || 'expedition', 40, 'res-ic')}
+      <span class="grow"><b>${esc(res.title || '')}</b> <small class="muted">· ${R.EXPEDITIONS[r.kind]?.name || ''}</small><br>${res.loot && Object.keys(res.loot).length ? rewardChips(res.loot, 14) : '<small class="muted">bez łupów</small>'}</span>${ic('up', 'chev-r')}</a>`;
+  }).join('') : '<p class="muted">Brak raportów – wyślij pierwszą ekspedycję!</p>';
+  return layout({ title: 'Ekspedycje', user, st, flash, active: 'statek', body: `
+  <section class="card banner exp-banner" style="--bg:url('/img/expedition_bg.webp?v=${V}')"><h2>Ekspedycje</h2>
+    <p class="small">Statek wyrusza w nieznane: surowce, wraki, artefakty – ale też piraci i burze jonowe. W tym czasie nie może walczyć.</p>${hpBar(st)}</section>
+  ${act}
+  <section class="card"><h3 class="with-ic">${pi('expedition', 30)} Cele</h3>
+    ${!active && st.ship.hp < minHp ? `<p class="warn small">Statek potrzebuje min. ${R.EXPEDITION_MIN_HP * 100}% HP (${minHp}), by wyruszyć.</p>` : ''}
+    ${kinds}</section>
+  <section class="card"><h3 class="with-ic">${ic('log', 'acc')} Raporty</h3>${histHtml}</section>` });
+}
+
+export function expeditionReport({ user, st, flash, ex, now }) {
+  const res = JSON.parse(ex.result);
+  const k = R.EXPEDITIONS[ex.kind];
+  if (ex.status === 'active') return layout({ title: 'Ekspedycja', user, st, flash, active: 'statek', body: `<section class="card center">${pi('expedition', 120, 'big-ic float')}<h2>${k.name}</h2><p>Statek wciąż w drodze – powrót za <b data-countdown="${ex.return_at}" data-reload>${dur(ex.return_at - now)}</b>.</p><a class="btn wide" href="/ekspedycje">Wróć</a></section>` });
+  const bad = res.event === 'pirates' || res.event === 'storm';
+  return layout({ title: 'Raport z ekspedycji', user, st, flash, active: 'statek', body: `
+  <section class="card center result banner ${bad ? 'lose' : 'win'}" style="--bg:url('/img/expedition_bg.webp?v=${V}')">
+    ${pi(EX_EVENT_ICON[res.event] || 'expedition', 110, 'big-ic')}
+    <small class="muted">${k?.name || ''} · ${k?.h || ''} h</small>
+    <h2>${esc(res.title)}</h2>
+    <p>${esc(res.text)}</p>
+    ${res.loot && Object.keys(res.loot).length ? `<p class="reward">${rewardChips(res.loot, 20)}</p>` : ''}
+    ${res.dmg ? `<p class="warn small">${ic('heart', 'hp-ic')} Uszkodzenia kadłuba: −${Math.round(res.dmg * 100)}% HP</p>` : ''}
+    ${res.levelUp ? `<p class="lvup">${pi('power', 22, 'inl')} Awans na poziom ${res.levelUp}!</p>` : ''}
+  </section>
+  <section class="card"><a class="btn primary wide" href="/ekspedycje">${ic('ship')} Kolejna ekspedycja</a></section>` });
+}
 
 function colonyCallouts(user, st, now) {
   const out = [];
@@ -242,7 +319,8 @@ export function colony({ user, st, flash, now = Date.now() }) {
     }[id];
     return upgradeCard({ action: `/kolonia/ulepsz/${id}`, icon: img('b_' + id, b.name, 'thumb', 64), name: b.name, desc: b.desc,
       lvl, max, effect: effect(lvl), next: lvl < max ? effect(lvl + 1) : '', cost: R.upgradeCost(b, lvl), have,
-      block: lvl >= max ? { label: 'MAX', why: 'Osiągnięto maksymalny poziom' } : null });
+      block: lvl >= max ? { label: 'MAX', why: 'Osiągnięto maksymalny poziom' } : null, now, secs: R.buildTime(lvl), rushAction: '/kolonia/przyspiesz',
+      building: user.bq_id === id ? { until: user.bq_until, total: R.buildTime(lvl) } : null, busy: user.bq_id && user.bq_id !== id ? R.BUILDINGS[user.bq_id]?.name : null });
   }).join('');
   return layout({ title: 'Kolonia', user, st, flash, active: 'kolonia', body: `
   <section class="card colony banner" style="--bg:url('/img/hero.webp?v=${V}')">
@@ -258,11 +336,11 @@ export function colony({ user, st, flash, now = Date.now() }) {
     <div class="pends">${pend}</div>
     <form method="post" action="/kolonia/zbierz"><button class="btn primary wide collect">${pi('collect', 34, 'btn-pi')} Zbierz surowce</button></form>
   </section>
-  <section class="card"><h3 class="with-ic">${ic('colony', 'acc')} Budynki</h3><p class="muted small">Ulepszenie automatycznie zbiera surowce z magazynu wydobycia.</p>${blds}</section>
+  <section class="card"><h3 class="with-ic">${ic('colony', 'acc')} Budynki</h3><p class="muted small">Jedna budowa naraz. Rozpoczęcie budowy zbiera surowce z magazynu wydobycia.</p>${blds}</section>
   <div class="logout"><form method="post" action="/wyloguj"><button class="btn sm">${ic('logout')} Wyloguj</button></form></div>` });
 }
 
-export function ship({ user, st, flash }) {
+export function ship({ user, st, flash, now = Date.now() }) {
   const cap = R.moduleCap(user);
   const base = R.shipStats(user);
   const modEff = {
@@ -275,7 +353,8 @@ export function ship({ user, st, flash }) {
     const capped = lvl >= cap;
     return upgradeCard({ action: `/statek/ulepsz/${id}`, icon: `<span class="mod-ic">${pi(id, 64, '', m.name)}</span>`, name: m.name, desc: m.desc,
       lvl, max: cap, effect: modEff[id](0), next: capped ? '' : modEff[id](1), cost: R.upgradeCost(m, lvl), have: st.stock,
-      block: capped ? { label: 'Limit', why: 'Ulepsz stocznię, by podnieść limit' } : null });
+      block: capped && user.mq_id !== id ? { label: 'Limit', why: 'Ulepsz stocznię, by podnieść limit' } : null, now, secs: R.moduleTime(lvl), rushAction: '/statek/przyspiesz',
+      building: user.mq_id === id ? { until: user.mq_until, total: R.moduleTime(lvl) } : null, busy: user.mq_id && user.mq_id !== id ? R.MODULES[user.mq_id]?.name : null });
   }).join('');
   return layout({ title: 'Statek', user, st, flash, active: 'statek', body: `
   <section class="card center ship-card" style="--shield:${Math.min(0.15 + user.s_shields * 0.07, 0.8).toFixed(2)}">
@@ -289,11 +368,13 @@ export function ship({ user, st, flash }) {
       <div>${pi('power', 40)}<b>${st.ship.power}</b><small>Siła</small></div>
     </div>
   </section>
+  ${expeditionCallout(user, now)}
   <section class="card"><h3 class="with-ic">${ic('ship', 'acc')} Moduły</h3><p class="muted small">Limit poziomu modułów: ${cap} (2 × poziom stoczni). Za surowce z magazynu głównego.</p>${mods}</section>` });
 }
 
 export function battle({ user, st, flash, targets, recent, now }) {
   const enough = st.ship.hp >= st.ship.maxHp * R.MIN_HP_RATIO;
+  const away = user.ex_until > now;
   const pir = R.PIRATES.map((p) => {
     const locked = user.level < p.minLvl;
     const e = R.pirate(p, user.level);
@@ -320,6 +401,7 @@ export function battle({ user, st, flash, targets, recent, now }) {
   }).join('') : '<p class="muted">Jeszcze nie walczyłeś.</p>';
   return layout({ title: 'Bitwa', user, st, flash, active: 'bitwa', body: `
   <section class="card banner battle-banner" style="--bg:url('/img/battle_bg.webp?v=${V}')"><h2>Centrum dowodzenia</h2>${hpBar(st)}
+    ${away ? `<p class="warn small with-ic">${pi('expedition', 26)} Statek jest na ekspedycji – wróci za <b data-countdown="${user.ex_until}" data-reload>${dur(user.ex_until - now)}</b>. Bitwy niedostępne.</p>` : ''}
     ${enough ? '' : `<p class="warn small">Statek jest zbyt uszkodzony (min. ${R.MIN_HP_RATIO * 100}% HP). Poczekaj na naprawę.</p>`}</section>
   <section class="card"><h3 class="with-ic">${pi('defeat', 30)} Piraci</h3>${pir}</section>
   <section class="card"><h3 class="with-ic">${pi('pvp', 30)} Inni gracze</h3><p class="muted small">Wygrana = łup 10% metalu i kryształów rywala. Zaatakowany gracz dostaje 15 min ochrony.</p>${tg}</section>

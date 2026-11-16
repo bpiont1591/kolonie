@@ -157,3 +157,41 @@ export function simulate(a, d, rnd = Math.random) {
   log.push({ r: round, side: 'x', t: aWon ? `🏆 Zwycięstwo: ${A.name}!` : `💀 ${A.name} wycofuje się pokonany.` });
   return { aWon, aHp: A.hp, dHp: D.hp, rounds: round, log };
 }
+
+// ---------- Etap 2: czasy budowy i ekspedycje ----------
+/** Czas ulepszenia z poziomu lvl na lvl+1 (sekundy). Krótki na niskich poziomach. */
+export const buildTime = (lvl) => Math.round(8 * lvl ** 2.2);
+export const moduleTime = (lvl) => Math.round(6 * lvl ** 2.1);
+/** Koszt natychmiastowego ukończenia w kryształach. */
+export const rushCost = (msLeft) => Math.max(1, Math.ceil(msLeft / 1000 / 12));
+
+export const EXPEDITIONS = {
+  zwiad: { id: 'zwiad', h: 1, name: 'Zwiad pasa asteroid', energy: 20, desc: 'Krótki lot – bezpieczny i szybki zysk.' },
+  mglawica: { id: 'mglawica', h: 4, name: 'Wyprawa do mgławicy', energy: 45, desc: 'Bogate złoża kryształów, ale i burze jonowe.' },
+  nieznane: { id: 'nieznane', h: 8, name: 'Ekspedycja w nieznane', energy: 80, desc: 'Najlepsze łupy i szansa na artefakt Prastarych.' },
+};
+export const EXPEDITION_MIN_HP = 0.5;
+const EVENTS = [
+  { id: 'calm', w: 45, title: 'Spokojny lot', text: 'Drony zebrały surowce z dryfujących asteroid. Bez niespodzianek.', loot: 1, dmg: [0, 0] },
+  { id: 'wreck', w: 18, title: 'Wrak krążownika', text: 'Natrafiono na opuszczony wrak – ładownie pełne surowców!', loot: 1.8, dmg: [0, 0.05] },
+  { id: 'pirates', w: 15, title: 'Zasadzka piratów', text: 'Piraci zaatakowali z ukrycia. Udało się uciec, ale część ładunku przepadła.', loot: 0.7, dmg: [0.25, 0.5] },
+  { id: 'storm', w: 12, title: 'Burza jonowa', text: 'Burza jonowa uszkodziła poszycie, ale skanery wykryły żyłę kryształów.', loot: 1.1, dmg: [0.1, 0.25], crystalBonus: 1.5 },
+  { id: 'artifact', w: 5, title: 'Artefakt Prastarych', text: 'W ruinach stacji znaleziono artefakt nieznanej cywilizacji!', loot: 1.3, dmg: [0, 0.1], artifact: true },
+  { id: 'empty', w: 5, title: 'Pusty sektor', text: 'Sektor okazał się pusty. Załoga wraca z niewielkim łupem.', loot: 0.3, dmg: [0, 0] },
+];
+/** Wynik ekspedycji (losowany przy powrocie). */
+export function expeditionResult(kind, level, bonus = 1, rnd = Math.random) {
+  const tot = EVENTS.reduce((a, e) => a + e.w, 0);
+  let x = rnd() * tot, ev = EVENTS[0];
+  for (const e of EVENTS) { if ((x -= e.w) < 0) { ev = e; break; } }
+  const h = kind.h, r = (0.85 + rnd() * 0.3) * ev.loot * bonus;
+  const loot = {
+    metal: Math.round((60 + 25 * level) * h * r),
+    crystal: Math.round((25 + 10 * level) * h * r * (ev.crystalBonus || 1)),
+    energy: Math.round((10 + 4 * level) * h * r * 0.5),
+    xp: Math.round((10 + 3 * level) * h ** 0.8 * Math.max(0.5, ev.loot)),
+  };
+  if (ev.artifact) { if (h >= 8 || rnd() < 0.35) loot.core = 1; else loot.xp *= 3; }
+  const dmg = ev.dmg[0] + rnd() * (ev.dmg[1] - ev.dmg[0]);
+  return { event: ev.id, title: ev.title, text: ev.text, loot, dmg: Math.round(dmg * 100) / 100 };
+}

@@ -38,7 +38,12 @@
       if (left <= 0 && el.hasAttribute('data-reload') && !reloading) { reloading = true; setTimeout(() => location.reload(), 800); }
     }
   }
-  if (cds.length) setInterval(cdTick, 1000);
+  const bars = [...document.querySelectorAll('[data-bar-to]')];
+  function barTick() {
+    const now = Date.now() - skew;
+    for (const b of bars) { const f = +b.dataset.barFrom, t = +b.dataset.barTo; b.style.width = Math.min(100, Math.max(2, (now - f) / (t - f) * 100)).toFixed(1) + '%'; }
+  }
+  if (cds.length || bars.length) setInterval(() => { cdTick(); barTick(); }, 1000);
   if (res.length || hp) setInterval(tick, 1000);
   document.addEventListener('submit', (e) => {
     const b = e.target.querySelector('button');

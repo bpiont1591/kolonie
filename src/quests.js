@@ -22,6 +22,7 @@ export const DAILY_POOL = [
   { id: 'metal', ev: 'metal', goal: 800, name: 'Zbierz 800 metalu', icon: 'r_metal', r: { crystal: 150, energy: 150 } },
   { id: 'collect3', ev: 'collect', goal: 3, name: 'Zbierz surowce 3 razy', icon: 'collect', r: { metal: 200, crystal: 80, energy: 80 } },
   { id: 'pvp1', ev: 'pvp', goal: 1, name: 'Zaatakuj innego gracza', icon: 'pvp', r: { metal: 300, energy: 150, xp: 25 } },
+  { id: 'exp1', ev: 'expedition', goal: 1, name: 'Wyślij statek na ekspedycję', icon: 'expedition', r: { metal: 250, crystal: 150, xp: 20 } },
   { id: 'energy', ev: 'energy', goal: 50, name: 'Zużyj 50 energii w bitwach', icon: 'r_energy', r: { metal: 250, crystal: 120 } },
 ];
 export const DAILY_COUNT = 4;
@@ -30,13 +31,14 @@ export const WEEKLY = [
   { id: 'w_upg', ev: 'upgrade', goal: 8, name: 'Wykonaj 8 ulepszeń', icon: 'power', r: { metal: 1200, crystal: 800 } },
   { id: 'w_metal', ev: 'metal', goal: 8000, name: 'Zbierz 8000 metalu', icon: 'r_metal', r: { crystal: 900, energy: 700 } },
   { id: 'w_pvp', ev: 'pvp', goal: 8, name: 'Zaatakuj graczy 8 razy', icon: 'pvp', r: { metal: 1500, energy: 600, xp: 100 } },
+  { id: 'w_exp', ev: 'expedition', goal: 5, name: 'Wyślij 5 ekspedycji', icon: 'expedition', r: { metal: 1800, crystal: 900, xp: 120 } },
 ];
 export const POINTS = { daily: 10, weekly: 25 };
 /** Skrzynie tygodniowe za punkty misji. */
 export const CHESTS = [
   { pts: 50, name: 'Skrzynia brązowa', r: { metal: 800, crystal: 400, energy: 300 } },
   { pts: 120, name: 'Skrzynia srebrna', r: { metal: 2000, crystal: 1000, energy: 800, xp: 100 } },
-  { pts: 200, name: 'Skrzynia złota', r: { metal: 4000, crystal: 2000, energy: 1500, xp: 300, core: 1 } },
+  { pts: 220, name: 'Skrzynia złota', r: { metal: 4000, crystal: 2000, energy: 1500, xp: 300, core: 1 } },
 ];
 
 /** Mnożnik nagród zależny od poziomu gracza. */
