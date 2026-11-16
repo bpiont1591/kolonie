@@ -10,6 +10,7 @@ import * as AR from '../src/arena.js';
 import * as A from '../src/achievements.js';
 import * as MK from '../src/market.js';
 import * as RF from '../src/referral.js';
+import * as AD from '../src/admin.js';
 let n = 0;
 const t = (name, fn) => { fn(); n++; console.log(`✅ ${name}`); };
 
@@ -144,5 +145,14 @@ t('Zaproszenia: kody polecające', () => {
   const c = RF.newCode(rnd);
   assert.ok(RF.CODE_RE.test(c)); assert.ok(!RF.CODE_RE.test('ABC'));
   assert.ok(RF.INVITER_REWARD.core === 1 && RF.LEVEL === 5);
+});
+t('Administracja: lista adminów, bany, pułapka, limiter', () => {
+  const list = AD.adminList(' Piotr , ADMIN2,,');
+  assert.ok(AD.isAdmin({ name_key: 'piotr' }, list) && AD.isAdmin({ username: 'Admin2' }, list) && AD.isAdmin({ name_key: 'x', role: 'admin' }, list));
+  assert.ok(!AD.isAdmin({ name_key: 'gracz' }, list) && !AD.isAdmin(null, list) && AD.adminList('').size === 0);
+  assert.ok(AD.isBanned({ banned_until: Date.now() + 1000 }) && !AD.isBanned({ banned_until: 0 }));
+  assert.ok(AD.honeypot({ website: 'x' }) && AD.honeypot({ ts: 1000 }, 1500) && !AD.honeypot({ ts: 1000 }, 5000) && !AD.honeypot({}));
+  const l = AD.windowLimiter(3, 1000);
+  assert.deepEqual([l.hit('a', 0), l.hit('a', 10), l.hit('a', 20), l.hit('a', 30), l.hit('b', 30), l.hit('a', 1500)], [false, false, false, true, false, false]);
 });
 console.log(`\n🎉 Testy jednostkowe: ${n} OK`);

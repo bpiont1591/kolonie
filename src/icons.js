@@ -1,5 +1,5 @@
 // Zestaw ikon UI: ręcznie rysowane glify SVG (spójny styl liniowy, gradient teal) + rastrowe ikony premium (WebP).
-export const V = 13; // wersja zasobów statycznych (cache-busting)
+export const V = 14; // wersja zasobów statycznych (cache-busting)
 const P = {
   colony: '<path d="M2.5 20.5h19"/><path d="M3.5 20.5a5.75 5.75 0 0 1 11.5 0"/><path d="M9.25 14.75v5.75M5.2 17.4h8.1"/><path d="M16.75 20.5V9.5h3.5v11"/><path d="M18.5 9.5V5"/><circle cx="18.5" cy="4" r=".9" class="f"/><path d="M16.75 13h3.5M16.75 16.5h3.5"/>',
   ship: '<path d="M13.5 4.5c3-1.4 7-1.5 7-1.5s-.1 4-1.5 7L12 17l-5-5z"/><path d="M7 12l-3.5.8 2.2 2.2M12 17l-.8 3.5-2.2-2.2"/><path d="M6.2 17.8 3.5 20.5"/><circle cx="15.5" cy="8.5" r="1.6" class="f"/>',
@@ -36,6 +36,6 @@ export const ic = (name, cls = '') => `<svg class="gi ${cls}" aria-hidden="true"
 export const pi = (name, size = 32, cls = '', alt = '') =>
   `<img src="/img/i_${name}.webp?v=${V}" class="pi ${cls}" width="${size}" height="${size}" alt="${alt}" decoding="async">`;
 export const RASTER = ['hull', 'guns', 'shields', 'repair', 'power', 'xp', 'pvp', 'corp', 'trophy', 'collect', 'defeat',
-  'daily', 'quest', 'chest', 'core', 'timer', 'expedition', 'treasury', 'war', 'bell', 'chat', 'tutorial', 'season', 'medal_gold', 'medal_silver', 'medal_bronze', 'arena', 'achievement', 'market', 'invite'];
+  'daily', 'quest', 'chest', 'core', 'timer', 'expedition', 'treasury', 'war', 'bell', 'chat', 'tutorial', 'season', 'medal_gold', 'medal_silver', 'medal_bronze', 'arena', 'achievement', 'market', 'invite', 'admin', 'announce'];
 /** Plakietka poziomu (sześciokąt). */
 export const lvBadge = (n, cls = '') => `<span class="lv ${cls}" title="Poziom ${n}"><b>${n}</b></span>`;

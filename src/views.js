@@ -10,6 +10,8 @@ export const plural = (n, one, few, many) => (n === 1 ? one : n % 10 >= 2 && n %
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 /** Tytuł przy nicku (z osiągnięć). */
 export const ttl = (id) => { const t = titleOf(id); return t ? ` <span class="ttl">${esc(t)}</span>` : ''; };
+/** Pasek ogłoszeń administracji (dla zalogowanych). */
+const annBar = (anns) => (anns?.length ? anns.map((a) => `<div class="ann ${esc(a.kind)}" data-ann="${Number(a.id)}" role="status">${pi('announce', 30, 'inl')}<span class="grow">${esc(a.text)}</span><button type="button" class="ann-x" aria-label="Zamknij" data-ann-x>×</button></div>`).join('') : '');
 export const fmt = (n) => Math.floor(n).toLocaleString('pl-PL');
 export const ago = (ts, now) => {
   const s = Math.max(0, Math.round((now - ts) / 1000));
@@ -56,6 +58,7 @@ export function layout({ title, user, st, body, flash, active = '', head = '', b
     <div class="res">
       ${R.RES_KEYS.map((k) => `<span>${resIcon(k)}<b>${fmt(st.stock[k])}</b></span>`).join('')}
     </div>
+    ${user._admin ? `<a class="rank-link adm" href="/admin" aria-label="Panel administratora" title="Panel administratora">${pi('admin', 30)}</a>` : ''}
     <a class="rank-link${active === 'ranking' ? ' on' : ''}" href="/ranking" aria-label="Ranking" title="Ranking">${pi('trophy', 30)}</a>
     <a class="who" href="/osiagniecia" title="Osiągnięcia i tytuły">${lvBadge(user.level, 'sm')}<span>${esc(user.username)}${titleOf(user.title) ? `<small class="who-t">${esc(titleOf(user.title))}</small>` : ''}</span></a>
   </header>` : '';
@@ -66,6 +69,7 @@ export function layout({ title, user, st, body, flash, active = '', head = '', b
   const nav = user ? `<nav class="tabs">${tabs.map(([id, href, icon, label]) =>
     `<a href="${href}" class="${active === id ? 'on' : ''}"${active === id ? ' aria-current="page"' : ''}>${ic(icon)}<span>${label}</span>${st?.badges?.[id] ? `<i class="badge">${st.badges[id] > 9 ? '9+' : st.badges[id]}</i>` : ''}</a>`).join('')}</nav>` : '';
   const tb = user && st?.tut ? tutBar(st.tut, active) : '';
+  const ann = user ? annBar(st?.ann) : '';
   const fl = flash ? `<div class="flash ${flash.ok ? 'ok' : 'err'}" role="status">${emo(esc(flash.msg))}</div>` : '';
   const fullTitle = title.includes('Kolonie') ? title : `${title} · Kolonie`;
   return `<!doctype html><html lang="pl"><head><meta charset="utf-8">
@@ -79,7 +83,7 @@ export function layout({ title, user, st, body, flash, active = '', head = '', b
 <link rel="stylesheet" href="/style.css?v=${V}">
 ${head}
 <title>${esc(fullTitle)}</title></head>
-<body class="${user ? 'in' : 'out'} ${bodyClass}" data-now="${Date.now()}"${st?.tut && !st.tut.done && st.tut.tab === active ? ` data-tut-step="${st.tut.key}"` : ''}>${SPRITE}<div class="stars"></div>${top}<main>${fl}${tb}${body}</main>${nav}
+<body class="${user ? 'in' : 'out'} ${bodyClass}" data-now="${Date.now()}"${st?.tut && !st.tut.done && st.tut.tab === active ? ` data-tut-step="${st.tut.key}"` : ''}>${SPRITE}<div class="stars"></div>${top}<main>${ann}${fl}${tb}${body}</main>${nav}
 <script src="/app.js?v=${V}" defer></script></body></html>`;
 }
 
@@ -170,6 +174,8 @@ export function landing({ online, players, battles24, top, flash, baseUrl, invit
     ${invitedBy ? `<div class="callout invite-cta">${pi('invite', 44)}<span class="grow"><b>Zaproszenie od ${esc(invitedBy)}</b><br><small>Osiągnij poziom 5, a oboje dostaniecie nagrody!</small></span></div>` : ''}
     <form method="post" action="/rejestracja" class="form">
       ${refCode ? `<input type="hidden" name="ref" value="${esc(refCode)}">` : ''}
+      <input type="hidden" name="ts" value="${Date.now()}">
+      <div class="hp-field" aria-hidden="true"><label>Strona WWW (zostaw puste)<input name="website" tabindex="-1" autocomplete="off"></label></div>
       <input name="username" placeholder="Nazwa komandora (3–16 znaków)" minlength="3" maxlength="16" required autocomplete="username" aria-label="Nazwa komandora">
       <input name="password" type="password" placeholder="Hasło (min. 6 znaków)" minlength="6" required autocomplete="new-password" aria-label="Hasło">
       <button class="btn cta wide">${ic('ship')} Wyląduj na planecie</button>

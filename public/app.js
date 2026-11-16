@@ -121,3 +121,16 @@
     });
   }
 })();
+// Ogłoszenia: zamknięte zapamiętujemy w przeglądarce.
+(() => {
+  let seen = [];
+  try { seen = JSON.parse(localStorage.getItem('ann-x') || '[]'); } catch { /* ignore */ }
+  for (const el of document.querySelectorAll('[data-ann]')) {
+    if (seen.includes(el.dataset.ann)) { el.remove(); continue; }
+    el.querySelector('[data-ann-x]')?.addEventListener('click', () => {
+      seen = [...seen.slice(-30), el.dataset.ann];
+      try { localStorage.setItem('ann-x', JSON.stringify(seen)); } catch { /* ignore */ }
+      el.remove();
+    });
+  }
+})();

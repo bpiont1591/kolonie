@@ -538,6 +538,86 @@ check(r.status === 200 && r.data.includes('Zagraj za darmo') && r.data.includes(
 r = await new Client('anon').get('/manifest.webmanifest', false);
 check(r.status === 200, 'Manifest PWA');
 
+// ---------- v5 etap 5: panel admina, bany, ogłoszenia, ochrona przed botami ----------
+r = await M2.get('/admin', false);
+check(r.status === 404, 'Admin: panel ukryty przed zwykłym graczem');
+r = await M2.post(`/admin/ban/${M1.id}`, { days: 1 });
+check(r.status === 404, 'Admin: akcje niedostępne dla zwykłego gracza');
+if (TOKEN) {
+  const ADM = new Client(`Admin_${suffix}`, { ...fpOf('adm'), 'x-admin-token': TOKEN });
+  r = await ADM.post('/rejestracja', { username: ADM.name, password: 'admin1234' }); ADM.id = r.data.userId;
+  r = await ADM.get('/admin', false);
+  check(r.status === 200 && r.data.includes('Panel administratora') && r.data.includes('Zgłoszenia do przeglądu') && r.data.includes('graczy'), 'Admin: panel ze statystykami');
+  r = await ADM.get('/admin/api/statystyki');
+  check(r.data.ok && r.data.players >= 0 && r.data.perDay.length === 14, 'Admin: API statystyk', `graczy: ${r.data.players}, aktywnych 24 h: ${r.data.active24}`);
+  r = await ADM.get('/admin/api/flagi');
+  check(r.data.ok && r.data.flags.some((f) => f.userId === M3.id && f.kind === 'multi'), 'Admin: multikonto (to samo IP/urządzenie) zgłoszone do przeglądu', r.data.flags.find((f) => f.userId === M3.id)?.detail);
+  const fid = r.data.flags.find((f) => f.userId === M3.id)?.id;
+  r = await ADM.post(`/admin/flaga/${fid}/ok`);
+  check(r.data.ok, 'Admin: zgłoszenie oznaczone jako sprawdzone');
+  r = await ADM.get(`/admin/gracz/${M3.id}`, false);
+  check(r.status === 200 && r.data.includes(M1.name) && r.data.includes('to samo'), 'Admin: karta gracza z powiązanymi kontami');
+  r = await ADM.get(`/admin?q=${encodeURIComponent(M2.name.slice(0, 8))}`, false);
+  check(r.data.includes(M2.name), 'Admin: wyszukiwanie gracza');
+  // ban
+  r = await ADM.post(`/admin/ban/${ADM.id}`, { days: 1 });
+  check(!r.data.ok, 'Admin: nie można zbanować samego siebie');
+  r = await ADM.post(`/admin/ban/${M2.id}`, { days: 1, reason: 'Test bana' });
+  check(r.data.ok && r.data.until > Date.now(), 'Admin: ban gracza na 1 dzień', r.data.msg);
+  r = await M2.get('/api/stan');
+  check(r.status === 401, 'Ban: sesja zbanowanego unieważniona');
+  r = await new Client('x', fpOf('m2')).post('/logowanie', { username: M2.name, password: 'rynek123' });
+  check(!r.data.ok && r.data.banned && /zablokowane/.test(r.data.msg) && /Test bana/.test(r.data.msg), 'Ban: logowanie odrzucone z powodem', r.data.msg);
+  r = await ADM.get('/api/ranking?tab=gracze');
+  check(!r.data.rows.some((x) => x.id === M2.id), 'Ban: zbanowany znika z rankingu');
+  r = await ADM.post(`/admin/odbanuj/${M2.id}`);
+  check(r.data.ok, 'Admin: odbanowanie');
+  r = await M2.post('/logowanie', { username: M2.name, password: 'rynek123' });
+  check(r.data.ok, 'Ban: po odbanowaniu logowanie działa');
+  // rola admina
+  r = await ADM.post(`/admin/rola/${M1.id}`, { role: 'admin' });
+  check(r.data.ok, 'Admin: nadanie roli administratora');
+  r = await M1.get('/admin', false);
+  check(r.status === 200, 'Admin: nowy administrator ma dostęp do panelu');
+  r = await M1.get('/kolonia', false);
+  check(r.data.includes('href="/admin"'), 'Admin: skrót do panelu w nagłówku');
+  r = await ADM.post(`/admin/ban/${M1.id}`, { days: 1 });
+  check(!r.data.ok, 'Admin: administratora nie można zbanować');
+  await ADM.post(`/admin/rola/${M1.id}`, { role: '' });
+  r = await M1.get('/admin', false);
+  check(r.status === 404, 'Admin: odebranie roli');
+  // ogłoszenia (widoczne tylko dla kont testowych)
+  r = await ADM.post('/admin/ogloszenie', { text: `Ogłoszenie testowe ${suffix}`, kind: 'event', hours: 1 });
+  check(r.data.ok && r.data.id > 0, 'Ogłoszenia: publikacja');
+  const annId = r.data.id;
+  r = await M2.get('/kolonia', false);
+  check(r.data.includes(`Ogłoszenie testowe ${suffix}`) && r.data.includes('data-ann-x'), 'Ogłoszenia: pasek u graczy');
+  r = await ADM.post(`/admin/ogloszenie/${annId}/wylacz`);
+  r = await M2.get('/kolonia', false);
+  check(r.data.ok !== false && !String(r.data).includes(`Ogłoszenie testowe ${suffix}`), 'Ogłoszenia: wyłączenie');
+}
+// pułapka na boty, limit rejestracji z IP, limit żądań
+r = await new Client('bot', fpOf('bot')).post('/rejestracja', { username: `Bot_${suffix}`, password: 'botbot12', website: 'http://spam.example' });
+check(TOKEN ? r.data.ok : !r.data.ok, TOKEN ? 'Pułapka: testy z tokenem omijają pułapkę (kontrola)' : 'Pułapka na boty');
+if (TOKEN) {
+  const enf = (k) => ({ ...fpOf(k), 'x-test-enforce': '1' });
+  r = await new Client('bot2', enf('bot')).post('/rejestracja', { username: `Bot2_${suffix}`, password: 'botbot12', website: 'http://spam.example' });
+  check(!r.data.ok && /Nie udało się/.test(r.data.msg), 'Pułapka na boty: ukryte pole odrzuca rejestrację', r.data.msg);
+  r = await new Client('bot3', enf('bot')).post('/rejestracja', { username: `Bot3_${suffix}`, password: 'botbot12', ts: Date.now() - 200 });
+  check(!r.data.ok, 'Pułapka na boty: zbyt szybkie wysłanie formularza odrzucone');
+  const okRegs = [];
+  for (let i = 1; i <= 4; i++) {
+    r = await new Client('ip', enf('ip')).post('/rejestracja', { username: `IpT${i}_${suffix}`, password: 'iptest12' });
+    okRegs.push(r.data.ok);
+  }
+  check(okRegs.join() === 'true,true,true,false', `Limit rejestracji: ${3} konta na IP na dobę`, okRegs.join());
+  r = await new Client('adm', { ...fpOf('adm'), 'x-admin-token': TOKEN }).get('/admin/api/flagi');
+  const statuses = [];
+  const RL = new Client('rl', enf('rl'));
+  for (let i = 0; i < 95; i++) statuses.push((await RL.post('/api/nieistnieje')).status);
+  check(statuses.includes(429) && statuses.indexOf(429) >= 88, 'Limit żądań: 429 po przekroczeniu 90 POST/min z jednego IP', `pierwsze 429 przy #${statuses.indexOf(429) + 1}`);
+}
+
 // ---------- sprzątanie: usunięcie kont testowych z tej serii ----------
 r = await new Client('anon').postJson('/api/admin/sprzataj', {});
 check(r.status === 403, 'Sprzątanie bez tokenu odrzucone');

@@ -287,6 +287,38 @@ export const MIGRATIONS = [
     "ALTER TABLE users ADD COLUMN reg_ip TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE users ADD COLUMN reg_device TEXT NOT NULL DEFAULT ''",
   ]],
+  ['010_admin', [
+    "ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT ''",
+    'ALTER TABLE users ADD COLUMN banned_until INTEGER NOT NULL DEFAULT 0',
+    "ALTER TABLE users ADD COLUMN ban_reason TEXT NOT NULL DEFAULT ''",
+    `CREATE TABLE IF NOT EXISTS flags (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL,
+      detail TEXT NOT NULL DEFAULT '',
+      created_at INTEGER NOT NULL,
+      resolved_at INTEGER NOT NULL DEFAULT 0,
+      resolved_by TEXT NOT NULL DEFAULT ''
+    )`,
+    'CREATE INDEX IF NOT EXISTS flags_open ON flags(resolved_at, created_at)',
+    `CREATE TABLE IF NOT EXISTS announcements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      text TEXT NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'info',
+      audience TEXT NOT NULL DEFAULT 'all',
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_by TEXT NOT NULL DEFAULT ''
+    )`,
+    `CREATE TABLE IF NOT EXISTS admin_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      admin TEXT NOT NULL,
+      action TEXT NOT NULL,
+      target TEXT NOT NULL DEFAULT '',
+      created_at INTEGER NOT NULL
+    )`,
+  ]],
 ];
 
 async function migrate(api, conv = (s) => s) {

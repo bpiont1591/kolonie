@@ -21,7 +21,9 @@ import registerPush from './features/push.js';
 import registerArena, { ensureArena, arenaSummary } from './features/arena.js';
 import registerAchievements, { checkAchievements, achText } from './features/achievements.js';
 import { N, fire } from './notify.js';
-import { adminTokenOk, purgeTestUsers, recordSeen, fingerprint } from './security.js';
+import { adminTokenOk, purgeTestUsers, recordSeen, fingerprint, clientIp } from './security.js';
+import * as AD from './admin.js';
+import registerAdmin, { addFlag, flagIfLinked, activeAnnouncements, stats as adStats } from './features/admin.js';
 import registerMarket from './features/market.js';
 import registerReferral, { checkReferral, findInviter } from './features/referral.js';
 import * as RF from './referral.js';
@@ -100,6 +102,17 @@ app.use((req, res, next) => {
   next();
 });
 
+// Ochrona przed botami: limit żądań POST na IP (testy z tokenem są zwolnione, chyba że wymuszą limity nagłówkiem).
+const testExempt = (req) => adminTokenOk(req.get('x-kolonie-test')) && !req.get('x-test-enforce');
+const postLimiter = AD.windowLimiter(AD.POST_PER_MIN, 60_000);
+app.use((req, res, next) => {
+  if (req.method !== 'POST' || testExempt(req) || !postLimiter.hit(clientIp(req))) return next();
+  adStats.blockedPosts++;
+  res.set('Retry-After', '30');
+  if ((req.get('accept') || '').includes('application/json')) return res.status(429).json({ ok: false, msg: 'Za dużo żądań – zwolnij na chwilę.' });
+  res.status(429).send('Za dużo żądań – zwolnij na chwilę.');
+});
+
 app.use(async (req, res, next) => {
   try {
     req.cookiesObj = parseCookies(req);
@@ -110,6 +123,7 @@ app.use(async (req, res, next) => {
     if (sid) {
       const s = await db.get('SELECT user_id, expires_at FROM sessions WHERE token_hash = ?', [sha(sid)]);
       if (s && s.expires_at > Date.now()) req.user = await db.get('SELECT * FROM users WHERE id = ?', [s.user_id]);
+      if (req.user && AD.isBanned(req.user)) { req.banned = req.user; req.user = null; } // zbanowany = wylogowany
       // kończenie zaległych budów/ekspedycji przy odczycie (bez crona)
       if (req.user) await G.augment(db, req.user, Date.now());
       if (req.user && G.isDue(req.user, Date.now())) {
@@ -117,7 +131,7 @@ app.use(async (req, res, next) => {
         req.user = await G.augment(db, await db.get('SELECT * FROM users WHERE id = ?', [s.user_id]), Date.now());
         onSettled(req.user, done);
       }
-      if (req.user) await recordSeen(db, req.user.id, req);
+      if (req.user) { await recordSeen(db, req.user.id, req); req.user._admin = AD.isAdmin(req.user); }
     }
     if (req.cookiesObj.flash) {
       try { req.flash = JSON.parse(req.cookiesObj.flash); } catch { /* ignore */ }
@@ -145,7 +159,7 @@ const page = (fn) => async (req, res, next) => {
   try {
     const now = Date.now();
     let st;
-    if (req.user) { await ensureFinalized(db, now); st = V.state(req.user, now); st.badges = { misje: (await G.questBadge(db, req.user, now)) + (await passBadge(db, req.user, now)) }; st.tut = TUT.state(req.user, now); }
+    if (req.user) { await ensureFinalized(db, now); st = V.state(req.user, now); st.badges = { misje: (await G.questBadge(db, req.user, now)) + (await passBadge(db, req.user, now)) }; st.tut = TUT.state(req.user, now); st.ann = await activeAnnouncements(db, req.user, now); }
     const html = await fn(req, now, st);
     if (html === null) return res.status(404).send(V.notFound({ user: req.user, st: V.state(req.user, now) }));
     res.set('Cache-Control', 'no-store').send(html);
@@ -192,7 +206,8 @@ app.get('/', page(async (req, now) => {
   const refCode = String(req.query.ref || req.cookiesObj.ref || '').toLowerCase();
   const inviter = await findInviter(db, refCode);
   if (inviter && req.query.ref) req.res.append('Set-Cookie', `ref=${refCode}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${30 * 86400}`);
-  return V.landing({ players, online, battles24, top, flash: req.flash, baseUrl: baseUrl(req), invitedBy: inviter?.username || null, refCode: inviter ? refCode : '' });
+  const banFlash = req.banned ? { ok: false, msg: `Konto ${req.banned.username} jest zablokowane${req.banned.banned_until >= AD.PERMANENT ? ' na stałe' : ` do ${new Date(req.banned.banned_until).toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' })}`}. Powód: ${req.banned.ban_reason}` } : null;
+  return V.landing({ players, online, battles24, top, flash: req.flash || banFlash, baseUrl: baseUrl(req), invitedBy: inviter?.username || null, refCode: inviter ? refCode : '' });
 }));
 
 const NAME_RE = /^[\p{L}\p{N}_-]{3,16}$/u;
@@ -209,7 +224,22 @@ app.post('/rejestracja', async (req, res, next) => {
     const now = Date.now();
     const planet = R.PLANETS[crypto.randomInt(R.PLANETS.length)];
     const base = { s_hull: 1, s_guns: 1, s_shields: 1, level: 1 };
+    const bot = AD.honeypot(req.body);
+    if (bot && !testExempt(req)) {
+      adStats.honeypot++;
+      const fpb = await fingerprint(db, req);
+      await addFlag(db, null, 'bot', `${isTest ? '[test] ' : ''}Rejestracja „${username}” odrzucona: ${bot} (IP #${fpb.ip.slice(0, 6)})`);
+      return respond(req, res, { ok: false, msg: 'Nie udało się założyć konta. Odśwież stronę i spróbuj ponownie.', redirect: '/' });
+    }
     const fp = await fingerprint(db, req);
+    if (!testExempt(req)) {
+      const recent = Number((await db.get('SELECT COUNT(*) AS n FROM users WHERE reg_ip = ? AND created_at > ?', [fp.ip, Date.now() - 86400_000])).n);
+      if (recent >= AD.REG_PER_IP_DAY) {
+        adStats.regLimit++;
+        await addFlag(db, null, 'reg_limit', `${isTest ? '[test] ' : ''}Limit ${AD.REG_PER_IP_DAY} kont/dobę z IP #${fp.ip.slice(0, 6)} – próba „${username}”`);
+        return respond(req, res, { ok: false, msg: `Z tego połączenia założono już ${AD.REG_PER_IP_DAY} konta w ciągu doby. Spróbuj jutro.`, redirect: '/' });
+      }
+    }
     const inviter = await findInviter(db, String(req.body.ref || req.cookiesObj.ref || '').toLowerCase());
     const id = await db.tx(async (t) => {
       if (await t.get('SELECT id FROM users WHERE name_key = ?', [username.toLowerCase()])) fail('Ta nazwa jest już zajęta.');
@@ -222,6 +252,7 @@ app.post('/rejestracja', async (req, res, next) => {
       return id;
     });
     await recordSeen(db, id, req, now);
+    await flagIfLinked(db, id, now);
     if (inviter) res.append('Set-Cookie', 'ref=; Path=/; Max-Age=0');
     await startSession(res, id);
     respond(req, res, { ok: true, msg: `Witaj na planecie ${planet}, komandorze ${username}!`, redirect: '/kolonia', data: { userId: id, planet } });
@@ -238,7 +269,10 @@ app.post('/logowanie', async (req, res, next) => {
     const u = await db.get('SELECT id, pass_hash FROM users WHERE name_key = ?', [username.toLowerCase()]);
     if (!u || !(await verifyPassword(String(req.body.password || ''), u.pass_hash)))
       return respond(req, res, { ok: false, msg: 'Błędna nazwa lub hasło.', redirect: '/' });
+    const full = await db.get('SELECT banned_until, ban_reason FROM users WHERE id = ?', [u.id]);
+    if (AD.isBanned(full)) return respond(req, res, { ok: false, msg: `Konto zablokowane ${full.banned_until >= AD.PERMANENT ? 'na stałe' : `do ${new Date(full.banned_until).toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' })}`}. Powód: ${full.ban_reason}`, redirect: '/', data: { banned: true } });
     await recordSeen(db, u.id, req);
+    await flagIfLinked(db, u.id);
     await startSession(res, u.id);
     respond(req, res, { ok: true, msg: 'Witaj z powrotem, komandorze!', redirect: '/kolonia', data: { userId: u.id } });
   } catch (e) { next(e); }
@@ -422,7 +456,7 @@ async function rankingData(tab, userId) {
   }
   const order = tab === 'pvp' ? 'u.pvp_points DESC, u.pvp_wins DESC, u.id ASC' : 'u.level DESC, u.xp DESC, u.id ASC';
   const rows = await db.all(`SELECT u.id, u.username, u.title, u.level, u.xp, u.pve_wins, u.pvp_wins, u.pvp_losses, u.pvp_points, c.tag
-    FROM users u LEFT JOIN corps c ON c.id = u.corp_id ORDER BY ${order} LIMIT 50`);
+    FROM users u LEFT JOIN corps c ON c.id = u.corp_id WHERE u.banned_until <= ? ORDER BY ${order} LIMIT 50`, [Date.now()]);
   const me = await db.get('SELECT level, xp, pvp_points, pvp_wins, id FROM users WHERE id = ?', [userId]);
   const higher = tab === 'pvp'
     ? await db.get('SELECT COUNT(*) AS n FROM users WHERE pvp_points > ? OR (pvp_points = ? AND (pvp_wins > ? OR (pvp_wins = ? AND id < ?)))', [me.pvp_points, me.pvp_points, me.pvp_wins, me.pvp_wins, me.id])
@@ -454,6 +488,7 @@ registerArena(ctx);
 registerAchievements(ctx);
 registerMarket(ctx);
 registerReferral(ctx);
+registerAdmin(ctx);
 registerPush(ctx);
 
 // ---------- sprzątanie kont testowych (token admina w nagłówku; działa też na produkcji) ----------

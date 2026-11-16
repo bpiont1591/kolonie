@@ -1,8 +1,8 @@
 // Service worker: zasoby statyczne z cache, strony gry zawsze z sieci (serwer jest źródłem prawdy).
-const CACHE = 'kolonie-v13';
-const ASSETS = ['/style.css?v=13', '/app.js?v=13', '/icon-192.png?v=13', '/manifest.webmanifest', '/offline.html',
-  '/fonts/rajdhani-bold.woff2', '/fonts/rajdhani-semibold.woff2', '/img/logo.webp?v=13',
-  '/img/r_metal.webp?v=13', '/img/r_crystal.webp?v=13', '/img/r_energy.webp?v=13'];
+const CACHE = 'kolonie-v14';
+const ASSETS = ['/style.css?v=14', '/app.js?v=14', '/icon-192.png?v=14', '/manifest.webmanifest', '/offline.html',
+  '/fonts/rajdhani-bold.woff2', '/fonts/rajdhani-semibold.woff2', '/img/logo.webp?v=14',
+  '/img/r_metal.webp?v=14', '/img/r_crystal.webp?v=14', '/img/r_energy.webp?v=14'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
@@ -31,7 +31,7 @@ self.addEventListener('push', (e) => {
   try { d = e.data ? e.data.json() : {}; } catch { d = { body: e.data && e.data.text() }; }
   const title = d.title || 'Kolonie';
   e.waitUntil(self.registration.showNotification(title, {
-    body: d.body || '', icon: '/icon-192.png?v=13', badge: '/icon-192.png?v=13', tag: d.tag || 'kolonie',
+    body: d.body || '', icon: '/icon-192.png?v=14', badge: '/icon-192.png?v=14', tag: d.tag || 'kolonie',
     renotify: !!d.tag, data: { url: d.url || '/kolonia' }, lang: 'pl',
   }));
 });
