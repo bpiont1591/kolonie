@@ -16,6 +16,7 @@ import registerCorp from './features/corp.js';
 import registerChat from './features/chat.js';
 import registerPush from './features/push.js';
 import { N, fire } from './notify.js';
+import { adminTokenOk, purgeTestUsers } from './security.js';
 
 const scrypt = promisify(crypto.scrypt);
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -186,10 +187,12 @@ app.post('/rejestracja', async (req, res, next) => {
     const now = Date.now();
     const planet = R.PLANETS[crypto.randomInt(R.PLANETS.length)];
     const base = { s_hull: 1, s_guns: 1, s_shields: 1, level: 1 };
+    // konta zakładane przez testy automatyczne (nagłówek z tokenem admina) są oznaczane i sprzątane po teście
+    const isTest = adminTokenOk(req.get('x-kolonie-test')) ? 1 : 0;
     const id = await db.tx(async (t) => {
       if (await t.get('SELECT id FROM users WHERE name_key = ?', [username.toLowerCase()])) fail('Ta nazwa jest już zajęta.');
-      const id = await t.insert(`INSERT INTO users (username, name_key, pass_hash, planet, created_at, metal, crystal, energy, collected_at, hp, hp_at)
-        VALUES (?, ?, ?, ?, ?, 400, 200, 150, ?, ?, ?)`, [username, username.toLowerCase(), hash, planet, now, now, R.shipStats(base).maxHp, now]);
+      const id = await t.insert(`INSERT INTO users (username, name_key, pass_hash, planet, created_at, metal, crystal, energy, collected_at, hp, hp_at, is_test)
+        VALUES (?, ?, ?, ?, ?, 400, 200, 150, ?, ?, ?, ?)`, [username, username.toLowerCase(), hash, planet, now, now, R.shipStats(base).maxHp, now, isTest]);
       return id;
     });
     await startSession(res, id);
@@ -414,6 +417,16 @@ registerExpeditions(ctx);
 registerCorp(ctx);
 registerChat(ctx);
 registerPush(ctx);
+
+// ---------- sprzątanie kont testowych (token admina w nagłówku; działa też na produkcji) ----------
+app.post('/api/admin/sprzataj', async (req, res, next) => {
+  try {
+    if (!adminTokenOk(req.get('x-admin-token'))) return res.status(403).json({ ok: false, msg: 'Brak uprawnień.' });
+    const out = await db.tx((t) => purgeTestUsers(t));
+    console.log(`Sprzątanie kont testowych: ${out.users} kont, ${out.corps} korporacji.`);
+    res.json({ ok: true, ...out });
+  } catch (e) { next(e); }
+});
 
 // ---------- narzędzia testowe (tylko lokalnie: DEV_HOOKS=1, nigdy na Renderze) ----------
 if (process.env.DEV_HOOKS === '1' && !process.env.RENDER) {

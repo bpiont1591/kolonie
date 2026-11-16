@@ -1,6 +1,18 @@
 // Test dymny przez HTTP: rejestracja 2 graczy, zbieranie, ulepszenia, bitwy, korporacja, ranking.
 // Użycie: BASE=http://localhost:3100 npm test   (serwer musi działać)
 const BASE = process.env.BASE || `http://localhost:${process.env.PORT || 3100}`;
+// Token admina (z env lub z pliku .env.admin – nigdy nie wypisywany): konta testowe są oznaczane i sprzątane po teście.
+import fs from 'node:fs';
+const TOKEN = process.env.ADMIN_TOKEN || (() => { try { return /^ADMIN_TOKEN=(.+)$/m.exec(fs.readFileSync(new URL('../.env.admin', import.meta.url), 'utf8'))[1].trim(); } catch { return ''; } })();
+const T_HDR = TOKEN ? { 'x-kolonie-test': TOKEN } : {};
+async function cleanup() {
+  if (!TOKEN) { console.log('⚠️  Brak ADMIN_TOKEN – konta testowe NIE zostały usunięte.'); return null; }
+  const r = await fetch(BASE + '/api/admin/sprzataj', { method: 'POST', headers: { 'x-admin-token': TOKEN, accept: 'application/json' } });
+  return r.status === 200 ? r.json() : { ok: false, status: r.status };
+}
+const bail = async (e) => { console.error(e); await cleanup().catch(() => {}); process.exit(1); };
+process.on('uncaughtException', bail);
+process.on('unhandledRejection', bail);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failures = 0;
 const check = (cond, label, extra = '') => {
@@ -11,7 +23,7 @@ const check = (cond, label, extra = '') => {
 class Client {
   constructor(name) { this.name = name; this.cookie = ''; }
   async req(method, path, body, json = true) {
-    const headers = { cookie: this.cookie };
+    const headers = { cookie: this.cookie, ...T_HDR };
     if (json) headers.accept = 'application/json';
     if (body) headers['content-type'] = 'application/x-www-form-urlencoded';
     const res = await fetch(BASE + path, { method, headers, body: body ? new URLSearchParams(body) : undefined, redirect: 'manual' });
@@ -26,7 +38,7 @@ class Client {
   get(p, json = true) { return this.req('GET', p, null, json); }
   post(p, b = {}) { return this.req('POST', p, b); }
   async postJson(path, body) {
-    const res = await fetch(BASE + path, { method: 'POST', headers: { cookie: this.cookie, accept: 'application/json', 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const res = await fetch(BASE + path, { method: 'POST', headers: { cookie: this.cookie, accept: 'application/json', 'content-type': 'application/json', ...T_HDR }, body: JSON.stringify(body) });
     const text = await res.text();
     let data; try { data = JSON.parse(text); } catch { data = text; }
     return { status: res.status, data };
@@ -324,6 +336,16 @@ r = await new Client('anon').get('/', false);
 check(r.status === 200 && r.data.includes('Zagraj za darmo') && r.data.includes('og:image'), 'Strona startowa');
 r = await new Client('anon').get('/manifest.webmanifest', false);
 check(r.status === 200, 'Manifest PWA');
+
+// ---------- sprzątanie: usunięcie kont testowych z tej serii ----------
+r = await new Client('anon').postJson('/api/admin/sprzataj', {});
+check(r.status === 403, 'Sprzątanie bez tokenu odrzucone');
+if (TOKEN) {
+  const c = await cleanup();
+  check(c?.ok && c.users >= 3, 'Sprzątanie kont testowych', `${c?.users} kont, ${c?.corps} korporacji`);
+  r = await A.get('/api/stan');
+  check(r.status === 401, 'Konto testowe usunięte (sesja nieważna)');
+} else console.log('⚠️  Brak ADMIN_TOKEN – konta testowe zostają w bazie.');
 
 console.log(failures ? `\n❌ Błędów: ${failures}` : '\n🎉 Wszystkie testy przeszły!');
 process.exit(failures ? 1 : 0);
