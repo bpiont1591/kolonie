@@ -3,6 +3,8 @@ import * as R from './rules.js';
 import * as Q from './quests.js';
 import { dailyPeriod, weeklyPeriod } from './time.js';
 import * as TUT from './tutorial.js';
+import * as S from './season.js';
+import { seasonId } from './time.js';
 
 export class GameError extends Error {}
 export const fail = (msg) => { throw new GameError(msg); };
@@ -17,7 +19,7 @@ export async function grant(t, u, now, rw) {
     const p = R.pending(u, now);
     for (const k of R.RES_KEYS) d[k] += p[k];
     sets.push('collected_at = ?', 'boost_until = ?');
-    params.push(now, Math.max(now, u.boost_until || 0) + Q.CORE.hours * 3600_000);
+    params.push(now, Math.max(now, u.boost_until || 0) + Q.CORE.hours * 3600_000 * Math.max(1, Number(rw.core) || 1));
   }
   sets.unshift('metal = metal + ?', 'crystal = crystal + ?', 'energy = energy + ?');
   params.unshift(d.metal, d.crystal, d.energy);
@@ -38,7 +40,7 @@ export function rewardText(rw) {
   if (rw.crystal) p.push(`💎${rw.crystal}`);
   if (rw.energy) p.push(`⚡${rw.energy}`);
   if (rw.xp) p.push(`+${rw.xp} XP`);
-  if (rw.core) p.push(`${Q.CORE.name} (${Q.CORE.desc})`);
+  if (rw.core) p.push(`${Q.CORE.name}${rw.core > 1 ? ` ×${rw.core}` : ''} (${Q.CORE.desc})`);
   if (rw.levelUp) p.push(`awans na poziom ${rw.levelUp}!`);
   return p.join(' ');
 }
@@ -48,6 +50,7 @@ const UPSERT = `INSERT INTO quest_progress (user_id, period, quest_id, progress)
 /** Zdarzenia gry -> postęp misji (dziennych i tygodniowych). events: { win: 1, metal: 120, ... } */
 export async function track(t, userId, now, events) {
   const dp = dailyPeriod(now), wp = weeklyPeriod(now);
+  await seasonXp(t, userId, now, S.xpFor(events));
   for (const [ev, amt] of Object.entries(events)) {
     if (!amt || amt <= 0) continue;
     const ts = TUT.stepForEvent(ev);
@@ -55,6 +58,12 @@ export async function track(t, userId, now, events) {
     for (const q of Q.dailyQuests(now)) if (q.ev === ev) await t.run(UPSERT, [userId, dp, q.id, Math.round(amt)]);
     for (const q of Q.WEEKLY) if (q.ev === ev) await t.run(UPSERT, [userId, wp, q.id, Math.round(amt)]);
   }
+}
+/** Dodaje XP sezonu (ranking miesięczny + przepustka). */
+export async function seasonXp(t, userId, now, amount) {
+  if (!(amount > 0)) return;
+  await t.run(`INSERT INTO season_stats (season, user_id, xp) VALUES (?, ?, ?)
+    ON CONFLICT (season, user_id) DO UPDATE SET xp = season_stats.xp + excluded.xp`, [seasonId(now), userId, Math.round(amount)]);
 }
 export const addPoints = (t, userId, now, pts) => t.run(UPSERT, [userId, weeklyPeriod(now), '_pts', pts]);
 

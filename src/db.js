@@ -185,6 +185,42 @@ export const MIGRATIONS = [
     'ALTER TABLE users ADD COLUMN tut_step INTEGER NOT NULL DEFAULT 0',
     'ALTER TABLE users ADD COLUMN tut_done INTEGER NOT NULL DEFAULT 0',
   ]],
+  ['007_seasons', [
+    `CREATE TABLE IF NOT EXISTS season_stats (
+      season TEXT NOT NULL,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      xp INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (season, user_id)
+    )`,
+    'CREATE INDEX IF NOT EXISTS season_stats_rank ON season_stats(season, xp DESC)',
+    `CREATE TABLE IF NOT EXISTS season_claims (
+      season TEXT NOT NULL,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      level INTEGER NOT NULL,
+      PRIMARY KEY (season, user_id, level)
+    )`,
+    `CREATE TABLE IF NOT EXISTS seasons (
+      id TEXT PRIMARY KEY,
+      finalized_at INTEGER NOT NULL
+    )`,
+    `CREATE TABLE IF NOT EXISTS season_awards (
+      season TEXT NOT NULL,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      username TEXT NOT NULL,
+      rank INTEGER NOT NULL,
+      xp INTEGER NOT NULL,
+      reward TEXT NOT NULL,
+      claimed INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (season, user_id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS user_badges (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      badge TEXT NOT NULL,
+      season TEXT NOT NULL DEFAULT '',
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (user_id, badge, season)
+    )`,
+  ]],
 ];
 
 async function migrate(api, conv = (s) => s) {

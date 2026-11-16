@@ -1,14 +1,17 @@
 // Etap 1: nagrody za codzienne logowanie, misje dzienne i tygodniowe, skrzynie tygodniowe.
 import * as Q from '../quests.js';
+import * as S from '../season.js';
 import * as G from '../game.js';
 import { fail } from '../game.js';
 import { dailyPeriod, weeklyPeriod, msToMidnight, msToWeekEnd } from '../time.js';
 import * as V from '../views.js';
+import { passState } from './season.js';
 
 export default function registerMissions({ app, db, auth, page, action }) {
   app.get('/misje', auth, page(async (req, now, st) => {
     const qs = await G.questState(db, req.user, now);
-    return V.missions({ user: req.user, st, flash: req.flash, qs, resetIn: msToMidnight(now), weekIn: msToWeekEnd(now), now });
+    const season = await passState(db, req.user, now);
+    return V.missions({ user: req.user, st, flash: req.flash, qs, resetIn: msToMidnight(now), weekIn: msToWeekEnd(now), now, season });
   }));
   app.get('/api/misje', auth, async (req, res, next) => {
     try { const now = Date.now(); res.set('Cache-Control', 'no-store').json({ ok: true, ...(await G.questState(db, req.user, now)), resetIn: msToMidnight(now) }); }
@@ -35,8 +38,10 @@ export default function registerMissions({ app, db, auth, page, action }) {
     if (row.claimed) fail('Nagroda za tę misję została już odebrana.');
     await t.run('UPDATE quest_progress SET claimed = 1 WHERE user_id = ? AND period = ? AND quest_id = ?', [u.id, period, id]);
     await G.addPoints(t, u.id, now, pts);
+    const sxp = pts === Q.POINTS.weekly ? S.QUEST_XP.weekly : S.QUEST_XP.daily;
+    await G.seasonXp(t, u.id, now, sxp);
     const rw = await G.grant(t, u, now, Q.scale(q.r, u.level));
-    return { msg: `Misja „${q.name}” ukończona! ${G.rewardText(rw)} · +${pts} pkt misji`, data: { quest: id, reward: rw, points: pts } };
+    return { msg: `Misja „${q.name}” ukończona! ${G.rewardText(rw)} · +${pts} pkt misji · +${sxp} XP sezonu`, data: { quest: id, reward: rw, points: pts } };
   }));
 
   app.post('/misje/skrzynia/:n', auth, action('/misje', async (t, u, now, req) => {
@@ -50,6 +55,7 @@ export default function registerMissions({ app, db, auth, page, action }) {
     await t.run(`INSERT INTO quest_progress (user_id, period, quest_id, progress, claimed) VALUES (?, ?, ?, 0, 1)
       ON CONFLICT (user_id, period, quest_id) DO UPDATE SET claimed = 1`, [u.id, wp, `_chest${n}`]);
     const rw = await G.grant(t, u, now, Q.scale(c.r, u.level));
+    await G.seasonXp(t, u.id, now, S.QUEST_XP.chest);
     return { msg: `${c.name} otwarta! ${G.rewardText(rw)}`, data: { chest: n, reward: rw } };
   }));
 }

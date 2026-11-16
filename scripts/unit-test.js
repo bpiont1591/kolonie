@@ -1,5 +1,6 @@
 // Testy jednostkowe czystych reguł (bez serwera).
 import * as Chat from '../src/chat.js';
+import * as S from '../src/season.js';
 import assert from 'node:assert/strict';
 import * as T from '../src/time.js';
 import * as Q from '../src/quests.js';
@@ -79,5 +80,25 @@ t('Czat: limiter tempa', () => {
   for (let i = 1; i <= 8; i++) if (lim(1, i * 2500)) blocked++;
   assert.ok(blocked >= 2); // maks. 6 na 30 s
   assert.equal(lim(1, 60_000), null);
+});
+t('Sezon: identyfikator, poprzedni sezon, czas do końca (Warszawa)', () => {
+  const nov = Date.parse('2026-11-30T22:59:00Z'); // 23:59 w Warszawie
+  assert.equal(T.seasonId(nov), '2026-11');
+  assert.equal(T.seasonId(Date.parse('2026-11-30T23:01:00Z')), '2026-12'); // już 1 grudnia w Warszawie
+  assert.equal(T.prevSeasonId(Date.parse('2027-01-10T12:00:00Z')), '2026-12');
+  assert.equal(T.prevSeasonId(nov), '2026-10');
+  assert.ok(Math.abs(T.msToSeasonEnd(nov) - 60_000) < 2000);
+  assert.equal(T.seasonName('2026-11'), 'Listopad 2026');
+});
+t('Przepustka: poziomy, XP ze zdarzeń, nagrody', () => {
+  assert.equal(S.level(0), 0); assert.equal(S.level(149), 0); assert.equal(S.level(150), 1); assert.equal(S.level(999999), 30);
+  assert.deepEqual(S.progress(160), { level: 1, inLevel: 10, need: 150, max: false });
+  assert.equal(S.progress(10_000).max, true);
+  assert.equal(S.xpFor({ pve: 1, win: 1 }), 15);
+  assert.equal(S.xpFor({ metal: 900, energy: 50 }), 0);
+  assert.equal(S.passReward(10).core, 1); assert.equal(S.passReward(30).core, 1); assert.ok(!S.passReward(7).core);
+  assert.ok(S.passReward(5).energy > 0 && S.passReward(29).metal > S.passReward(1).metal);
+  assert.equal(S.badgeForRank(1), 'gold'); assert.equal(S.badgeForRank(7), 'top10');
+  assert.ok(S.rankReward(1).metal > S.rankReward(2).metal && S.rankReward(2).metal > S.rankReward(10).metal);
 });
 console.log(`\n🎉 Testy jednostkowe: ${n} OK`);

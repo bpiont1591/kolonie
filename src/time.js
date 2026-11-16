@@ -26,3 +26,23 @@ export function dur(ms) {
   if (h < 24) return `${h} h${m % 60 ? ` ${m % 60} min` : ''}`;
   return `${Math.floor(h / 24)} d${h % 24 ? ` ${h % 24} h` : ''}`;
 }
+
+// ---------- sezony (miesiące kalendarzowe w Warszawie) ----------
+const MONTHS = ['Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec', 'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'];
+/** 'YYYY-MM' bieżącego sezonu. */
+export const seasonId = (now) => dayKey(now).slice(0, 7);
+export function prevSeasonId(now) {
+  const [y, m] = seasonId(now).split('-').map(Number);
+  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
+}
+/** Milisekundy do końca miesiąca (północ 1. dnia następnego miesiąca w Warszawie). */
+export function msToSeasonEnd(now) {
+  const [y, m, d] = dayKey(now).split('-').map(Number);
+  const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return msToMidnight(now) + (daysInMonth - d) * 86400_000;
+}
+/** „Listopad 2026” (dla identyfikatorów innych niż YYYY-MM – sam identyfikator). */
+export function seasonName(id) {
+  const m = /^(\d{4})-(\d{2})$/.exec(id);
+  return m ? `${MONTHS[Number(m[2]) - 1]} ${m[1]}` : id;
+}

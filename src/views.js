@@ -4,6 +4,8 @@ import * as Q from './quests.js';
 import { dur } from './time.js';
 export { ic, pi, lvBadge };
 
+/** Polska odmiana: plural(2, 'nagroda', 'nagrody', 'nagród') -> 'nagrody'. */
+export const plural = (n, one, few, many) => (n === 1 ? one : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? few : many);
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 export const fmt = (n) => Math.floor(n).toLocaleString('pl-PL');
 export const ago = (ts, now) => {
@@ -453,8 +455,8 @@ export function battleLog({ user, st, flash, b, now }) {
 }
 
 export function ranking({ user, st, flash, tab, rows, myRank }) {
-  const tabs = [['gracze', 'Poziom', 'xp'], ['pvp', 'PvP', 'pvp'], ['korporacje', 'Korporacje', 'corp']];
-  const head = `<div class="seg">${tabs.map(([id, l, icn]) => `<a href="/ranking?tab=${id}" class="${tab === id ? 'on' : ''}">${pi(icn, 22, 'inl')}${l}</a>`).join('')}</div>`;
+  const tabs = [['gracze', 'Poziom', 'xp'], ['pvp', 'PvP', 'pvp'], ['korporacje', 'Korpo', 'corp']];
+  const head = `<div class="seg">${tabs.map(([id, l, icn]) => `<a href="/ranking?tab=${id}" class="${tab === id ? 'on' : ''}">${pi(icn, 22, 'inl')}${l}</a>`).join('')}<a href="/sezon/ranking">${pi('season', 22, 'inl')}Sezon</a></div>`;
   let body;
   if (tab === 'korporacje') {
     body = rows.map((c, i) => `<div class="item rank"><span class="pos">${i + 1}</span><span class="grow"><b>${esc(c.name)}</b> <span class="corp">[${esc(c.tag)}]</span>
@@ -474,7 +476,7 @@ export function notFound({ user, st }) {
   return layout({ title: 'Nie znaleziono', user, st, body: `<section class="card center"><div class="huge">${ic('hole', 'acc')}</div><h2>Czarna dziura</h2><p>Tej strony nie ma w tym sektorze.</p><a class="btn" href="/">Wróć</a></section>` });
 }
 
-export function missions({ user, st, flash, qs, resetIn, weekIn, now }) {
+export function missions({ user, st, flash, qs, resetIn, weekIn, now, season }) {
   const ls = qs.login;
   const days = Q.LOGIN_REWARDS.map((r0, i) => {
     const d = i + 1, r = Q.scale(r0, user.level);
@@ -503,7 +505,11 @@ export function missions({ user, st, flash, qs, resetIn, weekIn, now }) {
   const chestList = qs.chests.map((c) => `<div class="quest${c.claimed ? ' claimed' : c.ready ? ' ready' : ''}"><span class="chest-ic t${c.n}">${pi('chest', 44)}</span>
       <div class="grow"><b>${c.name}</b> <small class="muted">· ${c.pts} pkt</small><br>${rewardChips(c.r, 15)}</div>
       ${c.claimed ? `<span class="q-done">${ic('check')}</span>` : c.ready ? `<form method="post" action="/misje/skrzynia/${c.n}"><button class="btn sm primary claim">Otwórz</button></form>` : `<span class="q-cnt">${ic('lock')}</span>`}</div>`).join('');
+  const sc = season ? `<a class="callout season" href="/sezon">${pi('season', 52)}<span class="grow"><b>Przepustka sezonowa · poziom ${season.level}/30</b><br>
+    <small>${season.claimable ? `<b class="ok-t">${season.claimable} ${plural(season.claimable, 'nagroda', 'nagrody', 'nagród')} do odebrania!</b>` : `${season.inLevel}/${season.need} XP do kolejnego poziomu`}</small>
+    <span class="mini-bar"><i style="width:${season.max ? 100 : Math.round(season.inLevel / season.need * 100)}%"></i></span></span>${ic('up', 'chev-r')}</a>` : '';
   return layout({ title: 'Misje', user, st, flash, active: 'misje', body: `
+  ${sc}
   <section class="card daily-card">
     <div class="with-ic">${pi('daily', 52)}<div class="grow"><h2 style="margin:0">Nagroda dnia</h2>
       <small class="muted">Seria: <b>${ls.streak}</b> ${ls.streak === 1 ? 'dzień' : 'dni'} z rzędu · co 7. dzień rzadki przedmiot</small></div></div>

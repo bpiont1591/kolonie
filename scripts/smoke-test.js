@@ -291,6 +291,44 @@ check(st.tut === null && st.user.tut_step === 6 && st.user.boost_until > Date.no
 r = await E.post('/samouczek/odbierz');
 check(!r.data.ok, 'Samouczek: brak podwójnych nagród');
 
+// ---------- v5 etap 2: sezony i przepustka ----------
+let sz = (await A.get('/api/sezon')).data;
+check(sz.ok && sz.xp > 0 && sz.levels.length === 30 && /^\d{4}-\d{2}$/.test(sz.season), 'Sezon: XP sezonu z walk i zbierania', `${sz.season}: ${sz.xp} XP, poziom ${sz.level}`);
+check(sz.ranking.rows.some((x) => x.id === A.id) && sz.ranking.myRank >= 1, 'Sezon: gracz w rankingu sezonowym', `#${sz.ranking.myRank}`);
+r = await E.post('/sezon/odbierz/30');
+check(!r.data.ok, 'Przepustka: nieosiągnięty poziom zablokowany', r.data.msg);
+for (const p of ['/sezon', '/sezon/ranking', '/sezon/archiwum']) { r = await E.get(p, false); check(r.status === 200 && r.data.includes('</html>'), `Strona ${p}`); }
+r = await E.get('/sezon', false);
+check(r.data.includes('Premium') && !/kup|zapłać|płatnoś/i.test(r.data.replace(/nie da się jej kupić/g, '')), 'Przepustka: ścieżka Premium tylko jako zablokowany podgląd');
+if (DEV) {
+  await E.post('/api/dev/sezon', { season: sz.season, xp: 700 });
+  r = await E.post('/sezon/odbierz/1');
+  check(r.data.ok && r.data.reward.metal > 0, 'Przepustka: odbiór poziomu 1', r.data.msg);
+  r = await E.post('/sezon/odbierz/1');
+  check(!r.data.ok, 'Przepustka: brak podwójnego odbioru');
+  r = await E.post('/sezon/odbierz-wszystko');
+  check(r.data.ok && r.data.levels.join() === '2,3,4', 'Przepustka: odbierz wszystko (poziomy 2–4)', r.data.msg);
+  await E.post('/api/dev/sezon', { season: sz.season, xp: 4500 });
+  r = await E.post('/sezon/odbierz-wszystko');
+  check(r.data.ok && r.data.levels.length === 26 && r.data.reward.core === 3, 'Przepustka: poziomy 5–30 z 3 Rdzeniami', `${r.data.levels?.length} poziomów`);
+  const fake = `T-${suffix}`;
+  await E.post('/api/dev/sezon', { season: fake, xp: 999 });
+  await A.post('/api/dev/sezon', { season: fake, xp: 500 });
+  r = await new Client('anon').postJson('/api/dev/sezon-zakoncz', { season: fake });
+  check(r.data.ok && r.data.awarded >= 2, 'Sezon: zamknięcie sezonu (top 10)', `nagrodzonych: ${r.data.awarded}`);
+  r = await new Client('anon').postJson('/api/dev/sezon-zakoncz', { season: fake });
+  check(r.data.awarded === null, 'Sezon: zamknięcie tylko raz');
+  sz = (await E.get('/api/sezon')).data;
+  const aw = sz.awards.find((x) => x.season === fake);
+  check(aw && aw.rank === 1 && sz.badges.some((b) => b.badge === 'gold' && b.season === fake) && sz.badges.some((b) => b.badge === 'pass'), 'Sezon: odznaki (mistrz sezonu, przepustka ukończona)');
+  r = await E.post(`/sezon/nagroda/${fake}`);
+  check(r.data.ok && r.data.rank === 1 && r.data.reward.metal === 5000, 'Sezon: nagroda za 1. miejsce', r.data.msg);
+  r = await E.post(`/sezon/nagroda/${fake}`);
+  check(!r.data.ok, 'Sezon: nagroda za miejsce tylko raz');
+  r = await E.get('/sezon/archiwum', false);
+  check(r.data.includes(E.name) && r.data.includes(fake), 'Sezon: archiwum zwycięzców');
+}
+
 // ---------- etap 4: czat ----------
 const D = new Client(`Vega_${suffix}`);
 r = await D.post('/rejestracja', { username: D.name, password: 'haslo789' });

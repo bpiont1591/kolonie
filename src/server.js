@@ -15,6 +15,7 @@ import * as C from './corp.js';
 import registerCorp from './features/corp.js';
 import registerChat from './features/chat.js';
 import registerTutorial from './features/tutorial.js';
+import registerSeason, { passBadge, ensureFinalized, finalizeSeason } from './features/season.js';
 import * as TUT from './tutorial.js';
 import registerPush from './features/push.js';
 import { N, fire } from './notify.js';
@@ -135,7 +136,7 @@ const page = (fn) => async (req, res, next) => {
   try {
     const now = Date.now();
     let st;
-    if (req.user) { st = V.state(req.user, now); st.badges = { misje: await G.questBadge(db, req.user, now) }; st.tut = TUT.state(req.user, now); }
+    if (req.user) { await ensureFinalized(db, now); st = V.state(req.user, now); st.badges = { misje: (await G.questBadge(db, req.user, now)) + (await passBadge(db, req.user, now)) }; st.tut = TUT.state(req.user, now); }
     const html = await fn(req, now, st);
     if (html === null) return res.status(404).send(V.notFound({ user: req.user, st: V.state(req.user, now) }));
     res.set('Cache-Control', 'no-store').send(html);
@@ -419,6 +420,7 @@ registerExpeditions(ctx);
 registerCorp(ctx);
 registerChat(ctx);
 registerTutorial(ctx);
+registerSeason(ctx);
 registerPush(ctx);
 
 // ---------- sprzątanie kont testowych (token admina w nagłówku; działa też na produkcji) ----------
@@ -457,6 +459,17 @@ if (process.env.DEV_HOOKS === '1' && !process.env.RENDER) {
       const n = await db.get('SELECT notified_bq, notified_mq, notified_ex, notified_storage, bq_until, mq_until, ex_until, collected_at FROM users WHERE id = ?', [Number(req.body.id) || 0]);
       res.json({ ok: true, sent, enabled: registerPush.enabled, n });
     } catch (e) { next(e); }
+  });
+  // Sezon testowy: ustawia XP sezonu gracza i zamyka wskazany sezon (np. „T-abc12”).
+  app.post('/api/dev/sezon', auth, async (req, res, next) => {
+    try {
+      const season = String(req.body.season || '').slice(0, 12), xp = Number(req.body.xp) || 0;
+      await db.run(`INSERT INTO season_stats (season, user_id, xp) VALUES (?, ?, ?) ON CONFLICT (season, user_id) DO UPDATE SET xp = excluded.xp`, [season, req.user.id, xp]);
+      res.json({ ok: true });
+    } catch (e) { next(e); }
+  });
+  app.post('/api/dev/sezon-zakoncz', async (req, res, next) => {
+    try { res.json({ ok: true, awarded: await finalizeSeason(db, String(req.body.season || '').slice(0, 12)) }); } catch (e) { next(e); }
   });
   app.post('/api/dev/misja', auth, action('/', async (t, u, now, req) => {
     await G.track(t, u.id, now, { [String(req.body.ev)]: Number(req.body.amount) || 1 });
