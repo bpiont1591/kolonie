@@ -334,3 +334,50 @@ body.landing main>.flash{position:fixed;top:10px;left:0;right:0;z-index:20}
 .exp-active{border-color:rgba(62,230,255,.45);box-shadow:0 0 24px rgba(62,230,255,.12)}
 .bar.exp-bar i{background:linear-gradient(90deg,#127aa3,#3ee6ff);transition:width 1s linear}
 .float{animation:float 4s ease-in-out infinite}
+
+/* ===== v4 etap 3: korporacje, wojna, boss ===== */
+.corp-nav{margin:12px 0}
+.role{display:inline-flex;align-items:center;gap:3px;font:700 .7rem "Rajdhani",sans-serif;text-transform:uppercase;letter-spacing:.05em;padding:1px 7px 1px 5px;border-radius:999px;vertical-align:middle;
+  background:rgba(255,255,255,.07);color:var(--mut)}
+.role .gi{width:12px;height:12px}
+.role.leader{background:rgba(255,200,80,.15);color:#ffd77a}.role.officer{background:rgba(62,230,255,.12);color:var(--acc)}
+.avatar.leader{border-color:rgba(255,200,80,.6);background:radial-gradient(circle at 40% 30%,#5a4a1c,#1c1408)}.avatar.leader .gi{color:#ffd54d}
+.avatar.officer{border-color:rgba(62,230,255,.55);background:radial-gradient(circle at 40% 30%,#1c4a5a,#081a1c)}
+.avatar.member .gi{color:var(--mut)}
+.acts{display:flex;gap:4px}
+.icon-btn{width:34px;height:34px;display:grid;place-items:center;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.05);color:var(--acc);cursor:pointer}
+.icon-btn .gi{width:18px;height:18px}.icon-btn.red{color:#ff8fa3}.icon-btn.gold{color:#ffd54d}
+.center-chips{justify-content:center;display:flex}
+.donate{display:grid;grid-template-columns:repeat(3,1fr) auto;gap:6px;align-items:center;margin-top:8px}
+.donate label{display:flex;align-items:center;gap:4px;background:rgba(0,0,0,.3);border:1px solid var(--line);border-radius:10px;padding:0 6px}
+.donate input{border:0;background:transparent;padding:10px 2px;font-size:.95rem;min-width:0}
+.donate .ri{margin:0;flex:none}
+.donate .btn{padding:10px 12px}
+.corp-log{list-style:none;margin:0;padding:0;font-size:.82rem}.corp-log li{padding:5px 0;border-top:1px solid var(--line)}.corp-log li:first-child{border-top:0}
+.sector{position:relative;aspect-ratio:4/3.4;margin:10px -4px 6px;border-radius:14px;overflow:hidden;border:1px solid rgba(62,230,255,.3);
+  background:radial-gradient(circle at 50% 50%,rgba(62,230,255,.08),transparent 60%),var(--bg) center/cover;box-shadow:inset 0 0 40px rgba(0,0,0,.7)}
+.sector svg{position:absolute;inset:0;width:100%;height:100%}
+.sector line{stroke:rgba(62,230,255,.35);stroke-width:.35;stroke-dasharray:1.2 1}
+.planet-node{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;text-align:center;width:96px;margin:0}
+.planet-node button{all:unset;cursor:pointer;display:flex;flex-direction:column;align-items:center}
+.orb{width:calc(38px * var(--s));height:calc(38px * var(--s));border-radius:50%;display:block;
+  background:radial-gradient(circle at 32% 30%,hsl(var(--h) 90% 75%),hsl(var(--h) 70% 40%) 45%,hsl(var(--h) 60% 12%) 75%);box-shadow:0 0 14px hsla(var(--h),90%,60%,.45),inset -6px -5px 12px rgba(0,0,0,.6)}
+.planet-node.ours .orb{box-shadow:0 0 0 2px #3ee6ff,0 0 20px rgba(62,230,255,.8),inset -6px -5px 12px rgba(0,0,0,.6)}
+.planet-node.theirs .orb{box-shadow:0 0 0 2px #ff6b5a,0 0 18px rgba(255,107,90,.6),inset -6px -5px 12px rgba(0,0,0,.6)}
+.planet-node.target .orb{animation:tgt 1.6s ease-in-out infinite;outline:2px dashed #ffc44d;outline-offset:5px}
+@keyframes tgt{50%{outline-offset:8px}}
+.pl-name{font:700 .74rem "Rajdhani",sans-serif;margin-top:3px;text-shadow:0 1px 4px #000;white-space:nowrap}
+.pl-own{font:600 .66rem "Rajdhani",sans-serif;color:var(--mut);background:rgba(5,9,24,.75);border-radius:6px;padding:0 5px;white-space:nowrap}
+.planet-node.ours .pl-own{color:#bff6ff;background:rgba(14,90,110,.8)}
+.planet-node.theirs .pl-own{color:#ffd1c9;background:rgba(110,30,20,.75)}
+.pl-mine{font:600 .62rem "Rajdhani",sans-serif;color:var(--acc)}
+.boss-card{overflow:hidden;border-color:rgba(255,79,216,.35);background:linear-gradient(180deg,rgba(120,20,90,.25),rgba(18,26,56,.8) 60%)}
+.boss-wrap{position:relative}
+.boss-art{width:100%;max-width:320px;height:auto;border-radius:18px;display:block;margin:0 auto 8px;box-shadow:0 0 40px rgba(255,79,216,.25);border:1px solid rgba(255,79,216,.35)}
+.boss-art.dim{filter:grayscale(.6) brightness(.6)}
+.boss-card.killed .boss-art,.boss-card.escaped .boss-art{filter:grayscale(.7) brightness(.55)}
+.boss-stamp{position:absolute;left:50%;top:45%;transform:translate(-50%,-50%) rotate(-12deg);font:700 2rem "Rajdhani",sans-serif;color:#ff5470;border:3px solid #ff5470;padding:2px 14px;border-radius:10px;background:rgba(10,0,10,.6)}
+.boss-card h2{display:flex;align-items:center;justify-content:center;gap:8px}
+.bar.boss-hp{height:26px}.bar.boss-hp i{background:linear-gradient(90deg,#8a1060,#ff4fd8 60%,#ff9d3c)}
+.bar.boss-hp span{line-height:24px;font-size:.85rem}
+.boss-atk{font-size:1.15rem;padding:15px}

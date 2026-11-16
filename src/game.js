@@ -129,3 +129,39 @@ export async function settle(t, u, now) {
   await t.run(`UPDATE users SET ${SETTLE_COLS.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`, [...SETTLE_COLS.map((k) => c[k]), c.id]);
   return { u: c, done };
 }
+
+// ---------- Etap 3: bonusy korporacji, punkty wojenne ----------
+import * as C from './corp.js';
+import { weekStart } from './time.js';
+const winnerCache = new Map(); // tydzień (zakończony) -> zwycięzca
+export async function weekWinner(db, week) {
+  if (winnerCache.has(week)) return winnerCache.get(week);
+  const w = C.winner(await db.all('SELECT planet, corp_id, points FROM war_points WHERE week = ? AND points > 0', [week]));
+  winnerCache.set(week, w);
+  if (winnerCache.size > 20) winnerCache.delete(winnerCache.keys().next().value);
+  return w;
+}
+/** Dokleja do gracza bonusy korporacji (_prodBonus, _xpBonus, _corp). */
+export async function augment(db, u, now) {
+  if (!u) return u;
+  u._prodBonus = 0; u._xpBonus = 0; u._corp = null;
+  if (!u.corp_id) return u;
+  const c = await db.get('SELECT * FROM corps WHERE id = ?', [u.corp_id]);
+  if (!c) return u;
+  const w = await weekWinner(db, weekStart(now) - 7);
+  u._corp = c; u._warWinner = !!(w && w.corp_id === c.id);
+  u._prodBonus = C.refineryBonus(c) + (u._warWinner ? C.WAR_WIN_BONUS : 0);
+  u._xpBonus = C.xpBonus(c);
+  return u;
+}
+/** Punkty wojenne za aktywność członka (na planetę-cel korporacji). */
+export async function warPoints(t, u, now, pts) {
+  if (!u.corp_id || !pts) return;
+  const c = u._corp || await t.get('SELECT war_target FROM corps WHERE id = ?', [u.corp_id]);
+  const week = weekStart(now), planet = c?.war_target || 4;
+  await t.run(`INSERT INTO war_points (week, corp_id, planet, points) VALUES (?, ?, ?, ?)
+    ON CONFLICT (week, corp_id, planet) DO UPDATE SET points = war_points.points + excluded.points`, [week, u.corp_id, planet, pts]);
+  await t.run(`INSERT INTO war_contrib (week, user_id, corp_id, points) VALUES (?, ?, ?, ?)
+    ON CONFLICT (week, user_id, corp_id) DO UPDATE SET points = war_contrib.points + excluded.points`, [week, u.id, u.corp_id, pts]);
+}
+export const corpLog = (t, corpId, now, text) => t.run('INSERT INTO corp_log (corp_id, created_at, text) VALUES (?, ?, ?)', [corpId, now, text]);

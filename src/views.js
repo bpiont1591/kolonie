@@ -5,18 +5,18 @@ import { dur } from './time.js';
 export { ic, pi, lvBadge };
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const fmt = (n) => Math.floor(n).toLocaleString('pl-PL');
-const ago = (ts, now) => {
+export const fmt = (n) => Math.floor(n).toLocaleString('pl-PL');
+export const ago = (ts, now) => {
   const s = Math.max(0, Math.round((now - ts) / 1000));
   if (s < 60) return `${s} s temu`;
   if (s < 3600) return `${Math.floor(s / 60)} min temu`;
   if (s < 86400) return `${Math.floor(s / 3600)} h temu`;
   return `${Math.floor(s / 86400)} d temu`;
 };
-const costHtml = (c, have) => R.RES_KEYS.filter((k) => c[k] > 0).map((k) => `<span class="cost${have && have[k] < c[k] ? ' lack' : ''}">${resIcon(k, 16)}${fmt(c[k])}</span>`).join('');
+export const costHtml = (c, have) => R.RES_KEYS.filter((k) => c[k] > 0).map((k) => `<span class="cost${have && have[k] < c[k] ? ' lack' : ''}">${resIcon(k, 16)}${fmt(c[k])}</span>`).join('');
 /** Zamienia emoji z komunikatów/logów na ikony (po escapowaniu). */
 const EMO = { '🔩': () => resIcon('metal', 16), '💎': () => resIcon('crystal', 16), '⚡': () => resIcon('energy', 16), '🏆': () => pi('trophy', 20, 'inl'), '💀': () => pi('defeat', 20, 'inl') };
-const emo = (html) => html.replace(/🔩|💎|⚡|🏆|💀/gu, (m) => EMO[m]());
+export const emo = (html) => html.replace(/🔩|💎|⚡|🏆|💀/gu, (m) => EMO[m]());
 const canPay = (have, c) => R.RES_KEYS.every((k) => have[k] >= c[k]);
 
 /** Stan gracza wyliczony na chwilę `now` (serwer jest jedynym źródłem prawdy). */
@@ -32,7 +32,7 @@ export function state(u, now) {
   };
 }
 
-function hpBar(st) {
+export function hpBar(st) {
   const pct = Math.round((st.ship.hp / st.ship.maxHp) * 100);
   return `<div class="bar hp" data-live-hp data-hp="${st.ship.hp}" data-max="${st.ship.maxHp}" data-rate="${(st.ship.repair / 60).toFixed(4)}">
     <i style="width:${pct}%"></i><span>${ic('heart', 'hp-ic')} <b data-hp-text>${st.ship.hp}</b>/${st.ship.maxHp} HP</span></div>`;
@@ -428,30 +428,6 @@ export function battleLog({ user, st, flash, b, now }) {
   <section class="card">${again}<a class="btn wide" href="/bitwa">${ic('login', 'flip')} Wróć</a></section>` });
 }
 
-export function corp({ user, st, flash, myCorp, members, corps }) {
-  if (myCorp) {
-    return layout({ title: 'Korporacja', user, st, flash, active: 'korporacja', body: `
-    <section class="card center">${pi('corp', 120, 'big-ic')}<h2>${esc(myCorp.name)} <span class="corp">[${esc(myCorp.tag)}]</span></h2>
-      <p class="muted small">${members.length}/${R.CORP_MAX_MEMBERS} członków · bonus +${R.CORP_XP_BONUS * 100}% XP z bitew</p></section>
-    <section class="card"><h3 class="with-ic">${ic('users', 'acc')} Członkowie</h3>${members.map((m, i) => `<div class="item"><span class="avatar${m.id === myCorp.owner_id ? ' owner' : ''}">${ic(m.id === myCorp.owner_id ? 'crown' : 'user')}</span>
-      <span class="grow"><b>${esc(m.username)}</b><br><small class="muted">poz. ${m.level} · ${pi('pvp', 16, 'inl')}${m.pvp_points} pkt PvP</small></span><span class="muted">#${i + 1}</span></div>`).join('')}</section>
-    <section class="card"><form method="post" action="/korporacja/opusc" onsubmit="return confirm('Na pewno opuścić korporację?')">
-      <button class="btn wide">${ic('logout')} Opuść korporację</button></form></section>` });
-  }
-  const list = corps.length ? corps.map((c) => `<div class="item">${pi('corp', 44)}
-    <span class="grow"><b>${esc(c.name)}</b> <span class="corp">[${esc(c.tag)}]</span><br><small class="muted">${c.members}/${R.CORP_MAX_MEMBERS} członków · siła ${c.power}</small></span>
-    <form method="post" action="/korporacja/dolacz/${c.id}"><button class="btn sm primary" ${c.members >= R.CORP_MAX_MEMBERS ? 'disabled' : ''}>Dołącz</button></form></div>`).join('')
-    : '<p class="muted">Nie ma jeszcze żadnej korporacji. Załóż pierwszą!</p>';
-  return layout({ title: 'Korporacje', user, st, flash, active: 'korporacja', body: `
-  <section class="card"><h3 class="with-ic">${pi('corp', 30)} Korporacje</h3><p class="muted small">Członkowie korporacji dostają +${R.CORP_XP_BONUS * 100}% XP z bitew i wspólnie walczą o ranking.</p>${list}</section>
-  <section class="card"><h3 class="with-ic">${ic('star', 'acc')} Załóż korporację</h3>
-    <form method="post" action="/korporacja/zaloz" class="form">
-      <input name="name" placeholder="Nazwa (3–24 znaki)" minlength="3" maxlength="24" required>
-      <input name="tag" placeholder="TAG (2–4 litery/cyfry)" minlength="2" maxlength="4" required style="text-transform:uppercase">
-      <button class="btn primary">Załóż za <span class="costs inl">${costHtml(R.CORP_COST)}</span></button>
-    </form></section>` });
-}
-
 export function ranking({ user, st, flash, tab, rows, myRank }) {
   const tabs = [['gracze', 'Poziom', 'xp'], ['pvp', 'PvP', 'pvp'], ['korporacje', 'Korporacje', 'corp']];
   const head = `<div class="seg">${tabs.map(([id, l, icn]) => `<a href="/ranking?tab=${id}" class="${tab === id ? 'on' : ''}">${pi(icn, 22, 'inl')}${l}</a>`).join('')}</div>`;
@@ -528,3 +504,4 @@ export function missions({ user, st, flash, qs, resetIn, weekIn, now }) {
     <p class="muted small">Każda misja tygodniowa: +${Q.POINTS.weekly} pkt. Reset w poniedziałek o północy.</p>
   </section>` });
 }
+

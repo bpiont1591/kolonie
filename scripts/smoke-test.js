@@ -31,6 +31,7 @@ const suffix = Date.now().toString(36).slice(-5);
 const A = new Client(`Nova_${suffix}`), B = new Client(`Orion_${suffix}`);
 
 let r = await A.post('/rejestracja', { username: A.name, password: 'tajne123' });
+A.id = r.data.userId;
 check(r.status === 200 && r.data.ok, `Rejestracja ${A.name}`, r.data.msg);
 r = await B.post('/rejestracja', { username: B.name, password: 'haslo456' });
 check(r.status === 200 && r.data.ok, `Rejestracja ${B.name}`, r.data.msg);
@@ -192,7 +193,61 @@ if (DEV) {
 r = await B.get('/ekspedycje', false);
 check(r.status === 200 && r.data.includes('Ekspedycje'), 'Strona /ekspedycje');
 
-for (const p of ['/kolonia', '/statek', '/bitwa', '/misje', '/korporacja', '/ranking', '/ranking?tab=pvp', '/ranking?tab=korporacje']) {
+// ---------- Etap 3: korporacje – role, skarbiec, wojna, boss ----------
+let ca = (await A.get('/api/korporacja')).data, cb = (await B.get('/api/korporacja')).data;
+check(ca.role === 'leader' && cb.role === 'member', 'Role: założyciel = przywódca, nowy = członek');
+r = await B.post('/korporacja/wplac', { metal: 50 });
+ca = (await A.get('/api/korporacja')).data;
+check(r.data.ok && ca.corp.t_metal >= 50, 'Wpłata do skarbca', r.data.msg);
+r = await B.post('/korporacja/wplac', { metal: 5 });
+check(!r.data.ok, 'Wpłata poniżej minimum odrzucona');
+r = await B.post('/korporacja/ulepsz/hq');
+check(!r.data.ok && /oficer/i.test(r.data.msg), 'Członek nie może wydawać skarbca', r.data.msg);
+r = await A.post(`/korporacja/awans/${B.id}`);
+check(r.data.ok && r.data.role === 'officer', 'Awans na oficera', r.data.msg);
+r = await B.post('/korporacja/ulepsz/hq');
+check(!r.data.ok && /skarbcu/.test(r.data.msg), 'Ulepszenie wymaga surowców w skarbcu', r.data.msg);
+r = await B.post('/korporacja/cel/2');
+check(r.data.ok && r.data.target === 2, 'Oficer ustawia cel wojny', r.data.msg);
+r = await B.post(`/korporacja/wyrzuc/${A.id || 0}`);
+check(!r.data.ok, 'Oficer nie może wyrzucić przywódcy');
+r = await B.post('/korporacja/boss/wezwij');
+check(r.data.ok && r.data.hp > 0, 'Wezwanie bossa rajdowego', r.data.msg);
+r = await B.post('/korporacja/boss/wezwij');
+check(!r.data.ok, 'Drugi boss naraz odrzucony');
+await sleep(4200);
+r = await B.post('/korporacja/boss/atak');
+check(r.data.ok && r.data.damage > 0, 'Atak na bossa', r.data.msg);
+cb = (await B.get('/api/korporacja')).data;
+check(cb.boss.hp === cb.boss.max_hp - r.data.damage && cb.hits.length === 1, 'Wspólne HP bossa i ranking obrażeń', `${cb.boss.hp}/${cb.boss.max_hp}`);
+const wp = cb.war.mine.find((x) => x.planet === 2);
+check(wp && wp.points >= 2, 'Punkty wojny na planecie-celu', `planeta 2: ${wp?.points} pkt`);
+r = await B.post(`/korporacja/boss/odbierz/${cb.boss.id}`);
+check(!r.data.ok, 'Nagroda niedostępna w trakcie walki');
+r = await A.post(`/korporacja/awans/${B.id}`);
+check(r.data.ok && r.data.role === 'leader', 'Przekazanie dowodzenia', r.data.msg);
+r = await B.post(`/korporacja/awans/${A.id || 0}`);
+check(r.data.ok && r.data.role === 'leader', 'Zwrot dowodzenia', r.data.msg);
+r = await A.post(`/korporacja/degraduj/${B.id}`);
+check(r.data.ok && r.data.role === 'member', 'Degradacja oficera', r.data.msg);
+if (DEV) {
+  await A.post('/api/dev/surowce');
+  r = await A.post('/korporacja/wplac', { metal: 3000, crystal: 1500, energy: 1000 });
+  r = await A.post('/korporacja/ulepsz/hq');
+  ca = (await A.get('/api/korporacja')).data;
+  check(r.data.ok && ca.corp.u_hq === 1, 'Ulepszenie Centrum dowodzenia (+5 miejsc)', r.data.msg);
+  await B.post('/api/dev/przewin', { minutes: 49 * 60 });
+  r = await B.post(`/korporacja/boss/odbierz/${cb.boss.id}`);
+  check(r.data.ok && r.data.killed === false && r.data.reward.metal > 0, 'Boss uciekł po 48 h – nagroda pocieszenia wg obrażeń', r.data.msg);
+  r = await B.post(`/korporacja/boss/odbierz/${cb.boss.id}`);
+  check(!r.data.ok, 'Podwójny odbiór nagrody z bossa odrzucony');
+}
+r = await A.post(`/korporacja/wyrzuc/${B.id}`);
+check(r.data.ok, 'Przywódca usuwa członka', r.data.msg);
+r = await B.post(`/korporacja/dolacz/${corpId}`);
+check(r.data.ok, 'Ponowne dołączenie', r.data.msg);
+
+for (const p of ['/korporacja/wojna', '/korporacja/boss', '/kolonia', '/statek', '/bitwa', '/misje', '/korporacja', '/ranking', '/ranking?tab=pvp', '/ranking?tab=korporacje']) {
   r = await A.get(p, false);
   check(r.status === 200 && r.data.includes('</html>'), `Strona ${p}`);
 }

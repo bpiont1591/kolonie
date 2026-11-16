@@ -101,6 +101,58 @@ export const MIGRATIONS = [
     )`,
     'CREATE INDEX IF NOT EXISTS expeditions_user ON expeditions(user_id, id DESC)',
   ]],
+  ['003_corp_wars_boss', [
+    "ALTER TABLE users ADD COLUMN corp_role TEXT NOT NULL DEFAULT 'member'",
+    "UPDATE users SET corp_role = 'leader' WHERE id IN (SELECT owner_id FROM corps)",
+    'ALTER TABLE corps ADD COLUMN t_metal INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE corps ADD COLUMN t_crystal INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE corps ADD COLUMN t_energy INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE corps ADD COLUMN u_hq INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE corps ADD COLUMN u_lab INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE corps ADD COLUMN u_refinery INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE corps ADD COLUMN war_target INTEGER NOT NULL DEFAULT 4',
+    `CREATE TABLE IF NOT EXISTS corp_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      corp_id INTEGER NOT NULL REFERENCES corps(id) ON DELETE CASCADE,
+      created_at INTEGER NOT NULL,
+      text TEXT NOT NULL
+    )`,
+    'CREATE INDEX IF NOT EXISTS corp_log_corp ON corp_log(corp_id, id DESC)',
+    `CREATE TABLE IF NOT EXISTS war_points (
+      week INTEGER NOT NULL,
+      corp_id INTEGER NOT NULL REFERENCES corps(id) ON DELETE CASCADE,
+      planet INTEGER NOT NULL,
+      points INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (week, corp_id, planet)
+    )`,
+    `CREATE TABLE IF NOT EXISTS war_contrib (
+      week INTEGER NOT NULL,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      corp_id INTEGER NOT NULL REFERENCES corps(id) ON DELETE CASCADE,
+      points INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (week, user_id, corp_id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS bosses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      corp_id INTEGER NOT NULL REFERENCES corps(id) ON DELETE CASCADE,
+      level INTEGER NOT NULL,
+      max_hp INTEGER NOT NULL,
+      hp INTEGER NOT NULL,
+      spawned_at INTEGER NOT NULL,
+      ends_at INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      ended_at INTEGER NOT NULL DEFAULT 0
+    )`,
+    'CREATE INDEX IF NOT EXISTS bosses_corp ON bosses(corp_id, id DESC)',
+    `CREATE TABLE IF NOT EXISTS boss_hits (
+      boss_id INTEGER NOT NULL REFERENCES bosses(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      damage INTEGER NOT NULL DEFAULT 0,
+      attacks INTEGER NOT NULL DEFAULT 0,
+      claimed INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (boss_id, user_id)
+    )`,
+  ]],
 ];
 
 async function migrate(api, conv = (s) => s) {

@@ -11,6 +11,8 @@ import { GameError, fail } from './game.js';
 import registerMissions from './features/missions.js';
 import registerExpeditions from './features/expeditions.js';
 import { dur } from './time.js';
+import * as C from './corp.js';
+import registerCorp from './features/corp.js';
 
 const scrypt = promisify(crypto.scrypt);
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -94,9 +96,10 @@ app.use(async (req, res, next) => {
       const s = await db.get('SELECT user_id, expires_at FROM sessions WHERE token_hash = ?', [sha(sid)]);
       if (s && s.expires_at > Date.now()) req.user = await db.get('SELECT * FROM users WHERE id = ?', [s.user_id]);
       // kończenie zaległych budów/ekspedycji przy odczycie (bez crona)
+      if (req.user) await G.augment(db, req.user, Date.now());
       if (req.user && G.isDue(req.user, Date.now())) {
-        const done = await db.tx(async (t) => (await G.settle(t, await t.get('SELECT * FROM users WHERE id = ?', [s.user_id]), Date.now())).done);
-        req.user = await db.get('SELECT * FROM users WHERE id = ?', [s.user_id]);
+        const done = await db.tx(async (t) => (await G.settle(t, await G.augment(t, await t.get('SELECT * FROM users WHERE id = ?', [s.user_id]), Date.now()), Date.now())).done);
+        req.user = await G.augment(db, await db.get('SELECT * FROM users WHERE id = ?', [s.user_id]), Date.now());
         onSettled(req.user, done);
       }
     }
@@ -137,7 +140,7 @@ const action = (redirect, fn) => async (req, res, next) => {
   try {
     const out = await db.tx(async (t) => {
       const now = Date.now();
-      const sres = await G.settle(t, await t.get('SELECT * FROM users WHERE id = ?', [req.user.id]), now);
+      const sres = await G.settle(t, await G.augment(t, await t.get('SELECT * FROM users WHERE id = ?', [req.user.id]), now), now);
       if (sres.done.length) onSettled(sres.u, sres.done);
       return fn(t, sres.u, now, req);
     });
@@ -219,7 +222,7 @@ app.get('/kolonia', auth, page((req, now, st) => V.colony({ user: req.user, st, 
 
 app.get('/api/stan', auth, (req, res) => {
   const now = Date.now();
-  const { pass_hash, ...pub } = req.user;
+  const { pass_hash, _corp, ...pub } = req.user;
   res.set('Cache-Control', 'no-store').json({ ok: true, now, user: pub, ...V.state(req.user, now) });
 });
 
@@ -312,7 +315,7 @@ function preBattle(u, now, energyCost) {
   if (u.energy < energyCost) fail(`Za mało energii w magazynie (potrzeba ⚡${energyCost}). Zbierz surowce.`);
   return { name: u.username, hp, maxHp: ship.maxHp, atk: ship.atk, def: ship.def };
 }
-function xpGain(u, base) { return Math.round(base * (u.corp_id ? 1 + R.CORP_XP_BONUS : 1)); }
+function xpGain(u, base) { return Math.round(base * (1 + (u._xpBonus ?? (u.corp_id ? R.CORP_XP_BONUS : 0)))); }
 
 app.post('/bitwa/piraci/:tier', auth, action('/bitwa', async (t, u, now, req) => {
   const tier = R.PIRATES.find((p) => p.id === req.params.tier) || fail('Nieznany przeciwnik.');
@@ -332,6 +335,7 @@ app.post('/bitwa/piraci/:tier', auth, action('/bitwa', async (t, u, now, req) =>
   const battleId = await t.insert(`INSERT INTO battles (created_at, kind, attacker_id, defender_id, enemy_name, attacker_won, log, reward)
     VALUES (?, 'pve', ?, NULL, ?, ?, ?, ?)`, [now, u.id, tier.name, sim.aWon ? 1 : 0, JSON.stringify(sim.log), JSON.stringify(rw)]);
   await G.track(t, u.id, now, { pve: 1, win: sim.aWon ? 1 : 0, energy: tier.energy });
+  if (sim.aWon) await G.warPoints(t, u, now, C.WAR_POINTS.pve);
   return { msg: sim.aWon ? `Zwycięstwo! +${reward.xp} XP, 🔩${reward.metal} 💎${reward.crystal}` : 'Porażka – piraci okazali się silniejsi.',
     redirect: `/bitwa/${battleId}`, data: { battleId, won: sim.aWon, reward: rw, rounds: sim.rounds } };
 }));
@@ -365,55 +369,9 @@ app.post('/bitwa/gracz/:id', auth, action('/bitwa', async (t, u, now, req) => {
   const battleId = await t.insert(`INSERT INTO battles (created_at, kind, attacker_id, defender_id, enemy_name, attacker_won, log, reward)
     VALUES (?, 'pvp', ?, ?, ?, ?, ?, ?)`, [now, u.id, d.id, d.username, sim.aWon ? 1 : 0, JSON.stringify(sim.log), JSON.stringify(rw)]);
   await G.track(t, u.id, now, { pvp: 1, win: sim.aWon ? 1 : 0, energy: R.PVP_ENERGY });
+  if (sim.aWon) await G.warPoints(t, u, now, C.WAR_POINTS.pvp);
   return { msg: sim.aWon ? `Zwycięstwo nad ${d.username}! Łup: 🔩${reward.metal} 💎${reward.crystal}` : `${d.username} odparł Twój atak.`,
     redirect: `/bitwa/${battleId}`, data: { battleId, won: sim.aWon, reward: rw, rounds: sim.rounds } };
-}));
-
-// ---------- korporacje ----------
-app.get('/korporacja', auth, page(async (req, now, st) => {
-  const u = req.user;
-  if (u.corp_id) {
-    const myCorp = await db.get('SELECT * FROM corps WHERE id = ?', [u.corp_id]);
-    const members = await db.all('SELECT id, username, level, pvp_points FROM users WHERE corp_id = ? ORDER BY level DESC, xp DESC', [u.corp_id]);
-    return V.corp({ user: u, st, flash: req.flash, myCorp, members });
-  }
-  const corps = await db.all(`SELECT c.id, c.name, c.tag, COUNT(u.id) AS members, COALESCE(SUM(u.level), 0) AS power
-    FROM corps c LEFT JOIN users u ON u.corp_id = c.id GROUP BY c.id ORDER BY power DESC LIMIT 30`);
-  return V.corp({ user: u, st, flash: req.flash, corps });
-}));
-
-app.post('/korporacja/zaloz', auth, action('/korporacja', async (t, u, now, req) => {
-  if (u.corp_id) fail('Najpierw opuść obecną korporację.');
-  const name = String(req.body.name || '').trim().replace(/\s+/g, ' ');
-  const tag = String(req.body.tag || '').trim().toUpperCase();
-  if (!/^[\p{L}\p{N} ._-]{3,24}$/u.test(name)) fail('Nazwa: 3–24 znaki (litery, cyfry, spacje).');
-  if (!/^[A-Z0-9]{2,4}$/.test(tag)) fail('TAG: 2–4 wielkie litery lub cyfry.');
-  if (!payable(u, R.CORP_COST)) fail(`Brakuje surowców. Koszt: ${costText(R.CORP_COST)}`);
-  if (await t.get('SELECT id FROM corps WHERE name_key = ? OR tag = ?', [name.toLowerCase(), tag])) fail('Nazwa lub TAG są już zajęte.');
-  const corpId = await t.insert('INSERT INTO corps (name, name_key, tag, owner_id, created_at) VALUES (?, ?, ?, ?, ?)', [name, name.toLowerCase(), tag, u.id, now]);
-  await t.run('UPDATE users SET corp_id = ?, metal = metal - ?, crystal = crystal - ? WHERE id = ?', [corpId, R.CORP_COST.metal, R.CORP_COST.crystal, u.id]);
-  return { msg: `Założono korporację ${name} [${tag}]!`, data: { corpId } };
-}));
-
-app.post('/korporacja/dolacz/:id', auth, action('/korporacja', async (t, u, now, req) => {
-  if (u.corp_id) fail('Już należysz do korporacji.');
-  const c = await t.get('SELECT * FROM corps WHERE id = ?', [Number(req.params.id) || 0]) || fail('Nie ma takiej korporacji.');
-  const n = (await t.get('SELECT COUNT(*) AS n FROM users WHERE corp_id = ?', [c.id])).n;
-  if (n >= R.CORP_MAX_MEMBERS) fail('Korporacja jest pełna.');
-  await t.run('UPDATE users SET corp_id = ? WHERE id = ?', [c.id, u.id]);
-  return { msg: `Dołączyłeś do ${c.name} [${c.tag}]!`, data: { corpId: c.id } };
-}));
-
-app.post('/korporacja/opusc', auth, action('/korporacja', async (t, u) => {
-  if (!u.corp_id) fail('Nie należysz do żadnej korporacji.');
-  const c = await t.get('SELECT * FROM corps WHERE id = ?', [u.corp_id]);
-  await t.run('UPDATE users SET corp_id = NULL WHERE id = ?', [u.id]);
-  if (c && c.owner_id === u.id) {
-    const heir = await t.get('SELECT id FROM users WHERE corp_id = ? ORDER BY level DESC, id ASC LIMIT 1', [c.id]);
-    if (heir) await t.run('UPDATE corps SET owner_id = ? WHERE id = ?', [heir.id, c.id]);
-    else await t.run('DELETE FROM corps WHERE id = ?', [c.id]);
-  }
-  return { msg: 'Opuściłeś korporację.' };
 }));
 
 // ---------- ranking ----------
@@ -444,9 +402,10 @@ app.get('/api/ranking', auth, async (req, res, next) => {
 });
 
 // ---------- moduły funkcji ----------
-const ctx = { settledHooks, devHooks, app, db, auth, page, action, respond, wantsJson, materialize, payable, costText };
+const ctx = { xpGain, preBattle, settledHooks, devHooks, app, db, auth, page, action, respond, wantsJson, materialize, payable, costText };
 registerMissions(ctx);
 registerExpeditions(ctx);
+registerCorp(ctx);
 
 // ---------- narzędzia testowe (tylko lokalnie: DEV_HOOKS=1, nigdy na Renderze) ----------
 if (process.env.DEV_HOOKS === '1' && !process.env.RENDER) {
@@ -462,6 +421,10 @@ if (process.env.DEV_HOOKS === '1' && !process.env.RENDER) {
     await t.run("UPDATE expeditions SET started_at = started_at - ?, return_at = return_at - ? WHERE user_id = ? AND status = 'active'", [ms, ms, u.id]);
     for (const h of devHooks) await h(t, u, ms);
     return { msg: 'Przewinięto czas.' };
+  }));
+  app.post('/api/dev/surowce', auth, action('/', async (t, u) => {
+    await t.run('UPDATE users SET metal = metal + 20000, crystal = crystal + 20000, energy = energy + 20000 WHERE id = ?', [u.id]);
+    return { msg: 'ok' };
   }));
   app.post('/api/dev/misja', auth, action('/', async (t, u, now, req) => {
     await G.track(t, u.id, now, { [String(req.body.ev)]: Number(req.body.amount) || 1 });
