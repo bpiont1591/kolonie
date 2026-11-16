@@ -31,6 +31,7 @@ export async function purgeTestUsers(t) {
   await t.run("DELETE FROM admin_log WHERE admin IN (SELECT username FROM users WHERE is_test = 1) OR target LIKE '[test]%'");
   await t.run("DELETE FROM flags WHERE detail LIKE '[test]%'");
   await t.run("DELETE FROM announcements WHERE audience = 'test'");
+  await t.run('DELETE FROM events WHERE test = 1');
   const ids = (await t.all('SELECT id FROM users WHERE is_test = 1')).map((r) => r.id);
   for (const id of ids) await t.run('DELETE FROM users WHERE id = ?', [id]);
   return { users: ids.length, corps: corpsDeleted };

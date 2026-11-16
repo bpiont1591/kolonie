@@ -13,6 +13,7 @@ import * as RF from '../src/referral.js';
 import * as AD from '../src/admin.js';
 import * as PR from '../src/progression.js';
 import * as CA from '../src/campaign.js';
+import * as EV from '../src/events.js';
 let n = 0;
 const t = (name, fn) => { fn(); n++; console.log(`✅ ${name}`); };
 
@@ -209,5 +210,22 @@ t('Kampania: dane, odblokowanie, gwiazdki, nagrody, trofea', () => {
   assert.ok(CA.progress({ level: 4 }, { '1-5': { stars: 1 } })[1].unlocked);
   const base = R.shipStats({ level: 5, s_hull: 2, s_guns: 2, s_shields: 2 }), rel = R.shipStats({ level: 5, s_hull: 2, s_guns: 2, s_shields: 2, relics: 'grax,kowal' });
   assert.ok(rel.maxHp > base.maxHp && rel.atk > base.atk && rel.def >= base.def);
+});
+t('Wydarzenia: harmonogram w czasie warszawskim, zmiana czasu, nagrody', () => {
+  const W = (iso) => Date.parse(iso);
+  assert.deepEqual(EV.activeScheduled(W('2026-11-21T12:00:00Z')).map((o) => o.kind), ['inwazja']); // sobota 13:00
+  assert.deepEqual(EV.activeScheduled(W('2026-11-21T08:59:00Z')).map((o) => o.kind), []); // sobota 9:59
+  assert.deepEqual(EV.activeScheduled(W('2026-11-18T19:30:00Z')).map((o) => o.kind).sort(), ['happy', 'lupy']); // środa 20:30
+  assert.deepEqual(EV.activeScheduled(W('2026-11-17T20:30:00Z')).map((o) => o.kind), []); // wtorek 21:30
+  const inv = EV.activeScheduled(W('2026-11-22T20:00:00Z'))[0];
+  assert.equal(inv.key, 'inwazja:2026-11-21'); assert.equal(inv.ends, W('2026-11-22T21:00:00Z'));
+  // weekend zmiany czasu (25.10.2026): start 10:00 CEST, koniec 22:00 CET
+  const dst = EV.occurrences(W('2026-10-24T00:00:00Z'), W('2026-10-26T00:00:00Z')).find((o) => o.kind === 'inwazja');
+  assert.deepEqual([dst.starts, dst.ends], [W('2026-10-24T08:00:00Z'), W('2026-10-25T21:00:00Z')]);
+  const up = EV.upcoming(W('2026-11-16T22:00:00Z'), 10);
+  assert.ok(up.length === 10 && up.every((o, i) => i === 0 || o.starts >= up[i - 1].starts) && new Set(up.map((o) => o.key)).size === 10);
+  assert.equal(EV.invasionReward(true, 4), null);
+  assert.ok(EV.invasionReward(true, 5).core === 1 && EV.invasionReward(true, 30).crystal > EV.invasionReward(true, 5).crystal && !EV.invasionReward(false, 10).core);
+  assert.ok(EV.invasionGoal(0) === 150 && EV.invasionGoal(10) === 400);
 });
 console.log(`\n🎉 Testy jednostkowe: ${n} OK`);

@@ -28,6 +28,8 @@ import registerAdmin, { addFlag, flagIfLinked, activeAnnouncements, stats as adS
 import registerMarket from './features/market.js';
 import registerFleet from './features/fleet.js';
 import registerCampaign from './features/campaign.js';
+import registerEvents, * as EVF from './features/events.js';
+import { POINTS as EV_POINTS } from './events.js';
 import registerReferral, { checkReferral, findInviter } from './features/referral.js';
 import * as RF from './referral.js';
 
@@ -162,7 +164,7 @@ const page = (fn) => async (req, res, next) => {
   try {
     const now = Date.now();
     let st;
-    if (req.user) { await ensureFinalized(db, now); st = V.state(req.user, now); st.badges = { misje: (await G.questBadge(db, req.user, now)) + (await passBadge(db, req.user, now)) }; st.tut = TUT.state(req.user, now); st.ann = await activeAnnouncements(db, req.user, now); }
+    if (req.user) { await ensureFinalized(db, now); st = V.state(req.user, now); st.badges = { misje: (await G.questBadge(db, req.user, now)) + (await passBadge(db, req.user, now)) }; st.tut = TUT.state(req.user, now); st.ann = await activeAnnouncements(db, req.user, now); st.events = await EVF.forUser(db, req.user, now); }
     const html = await fn(req, now, st);
     if (html === null) return res.status(404).send(V.notFound({ user: req.user, st: V.state(req.user, now) }));
     res.set('Cache-Control', 'no-store').send(html);
@@ -398,7 +400,8 @@ app.post('/bitwa/piraci/:tier', auth, action('/bitwa', async (t, u, now, req) =>
   const enemy = R.pirate(tier, u.level);
   const sim = R.simulate(me, enemy);
   let reward = { xp: 3, metal: 0, crystal: 0 };
-  if (sim.aWon) reward = R.pirateReward(tier, u.level, R.labBonus(u) * R.lootMult(u, 'pveLoot'));
+  const evs = await EVF.activeEvents(t, now, !!u.is_test);
+  if (sim.aWon) reward = EVF.doubled(R.pirateReward(tier, u.level, R.labBonus(u) * R.lootMult(u, 'pveLoot')), EVF.lootMult(evs));
   reward.xp = xpGain(u, reward.xp);
   const lv = R.addXp(u.level, u.xp, reward.xp);
   const hp = lv.levelsGained ? R.shipStats({ ...u, level: lv.level }).maxHp : Math.max(1, sim.aHp);
@@ -410,6 +413,7 @@ app.post('/bitwa/piraci/:tier', auth, action('/bitwa', async (t, u, now, req) =>
     VALUES (?, 'pve', ?, NULL, ?, ?, ?, ?)`, [now, u.id, tier.name, sim.aWon ? 1 : 0, JSON.stringify(sim.log), JSON.stringify(rw)]);
   await G.track(t, u.id, now, { pve: 1, win: sim.aWon ? 1 : 0, energy: tier.energy });
   if (sim.aWon) await G.warPoints(t, u, now, C.WAR_POINTS.pve);
+  if (sim.aWon) await EVF.contribute(t, u, now, EV_POINTS.pirate);
   return { msg: sim.aWon ? `Zwycięstwo! +${reward.xp} XP, 🔩${reward.metal} 💎${reward.crystal}` : 'Porażka – piraci okazali się silniejsi.',
     redirect: `/bitwa/${battleId}`, data: { battleId, won: sim.aWon, reward: rw, rounds: sim.rounds } };
 }));
@@ -444,6 +448,7 @@ app.post('/bitwa/gracz/:id', auth, action('/bitwa', async (t, u, now, req) => {
     VALUES (?, 'pvp', ?, ?, ?, ?, ?, ?)`, [now, u.id, d.id, d.username, sim.aWon ? 1 : 0, JSON.stringify(sim.log), JSON.stringify(rw)]);
   await G.track(t, u.id, now, { pvp: 1, win: sim.aWon ? 1 : 0, energy: R.PVP_ENERGY });
   if (sim.aWon) await G.warPoints(t, u, now, C.WAR_POINTS.pvp);
+  if (sim.aWon) await EVF.contribute(t, u, now, EV_POINTS.pvp);
   fire(() => N.send(d.id, sim.aWon
     ? { title: 'Twoja kolonia została zaatakowana!', body: `${u.username} przełamał obronę i zabrał ${reward.metal} metalu i ${reward.crystal} kryształów. Tarcza aktywna przez 15 min.`, url: '/bitwa', tag: 'attack' }
     : { title: 'Odparto atak na kolonię', body: `Twoje drony obroniły kolonię przed ${u.username}.`, url: '/bitwa', tag: 'attack' }));
@@ -492,6 +497,7 @@ registerAchievements(ctx);
 registerMarket(ctx);
 registerFleet(ctx);
 registerCampaign(ctx);
+registerEvents(ctx);
 registerReferral(ctx);
 registerAdmin(ctx);
 registerPush(ctx);

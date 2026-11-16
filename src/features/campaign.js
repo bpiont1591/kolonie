@@ -6,6 +6,8 @@ import * as G from '../game.js';
 import * as C from '../corp.js';
 import { fail } from '../game.js';
 import * as VC from '../views-campaign.js';
+import * as EVF from './events.js';
+import { POINTS as EV_POINTS } from '../events.js';
 
 export async function campaignMap(db, userId) {
   const rows = await db.all('SELECT mission, stars, wins FROM campaign WHERE user_id = ?', [userId]);
@@ -41,7 +43,7 @@ export default function registerCampaign({ app, db, auth, page, action, preBattl
     const stars = CA.starsFor(sim.aWon, sim.aHp, me.maxHp, mi.boss);
     const first = sim.aWon && ms.wins === 0;
     let rw = { xp: 4, metal: 0, crystal: 0 };
-    if (sim.aWon) rw = CA.reward(mi.c, mi.m, R.labBonus(u) * R.lootMult(u, 'pveLoot'), first);
+    if (sim.aWon) rw = EVF.doubled(CA.reward(mi.c, mi.m, R.labBonus(u) * R.lootMult(u, 'pveLoot'), first), EVF.lootMult(await EVF.activeEvents(t, now, !!u.is_test)));
     const newStars = Math.max(0, stars - ms.stars);
     if (newStars) rw.crystal += newStars * 5 * mi.c;
     rw.xp = xpGain(u, rw.xp);
@@ -60,6 +62,7 @@ export default function registerCampaign({ app, db, auth, page, action, preBattl
       VALUES (?, 'pve', ?, NULL, ?, ?, ?, ?)`, [now, u.id, `${ch.planet} ${mi.c}-${mi.m}: ${mi.boss ? ch.boss.name : mi.name}`, sim.aWon ? 1 : 0, JSON.stringify(sim.log), JSON.stringify(info)]);
     await G.track(t, u.id, now, { pve: 1, win: sim.aWon ? 1 : 0, energy: cost });
     if (sim.aWon) await G.warPoints(t, u, now, C.WAR_POINTS.pve);
+    if (sim.aWon) await EVF.contribute(t, u, now, mi.boss ? EV_POINTS.boss : EV_POINTS.campaign);
     const relicTxt = relic ? ` Unikalny łup: ${P.RELICS[relic].name} (${P.RELICS[relic].desc})!` : '';
     return { msg: sim.aWon ? `Misja ${mi.c}-${mi.m} zaliczona: ${'★'.repeat(stars)}${'☆'.repeat(3 - stars)} ${G.rewardText(got)}${relicTxt}` : `Misja ${mi.c}-${mi.m} nieudana – wzmocnij statek i spróbuj ponownie.`,
       redirect: `/bitwa/${battleId}`, data: { battleId, won: sim.aWon, stars, first, relic, reward: got } };

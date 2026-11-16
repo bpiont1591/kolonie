@@ -1,4 +1,5 @@
 // Widoki panelu administratora (etap v5/5).
+import * as EV from './events.js';
 import { layout, esc, fmt, ago } from './views.js';
 import { pi, ic, lvBadge } from './icons.js';
 import * as AD from './admin.js';
@@ -7,9 +8,9 @@ const dt = new Intl.DateTimeFormat('pl-PL', { timeZone: 'Europe/Warsaw', day: 'n
 const when = (ts) => dt.format(ts);
 const KIND = { multi: ['Multikonto', 'warn'], bot: ['Bot (pułapka)', 'bad'], reg_limit: ['Limit rejestracji', 'warn'] };
 const banTag = (p, now) => (p.banned_until > now ? ` <span class="bad-tag">ban${p.banned_until >= AD.PERMANENT ? ' ∞' : ''}</span>` : '');
-const nav = `<div class="seg"><a href="/admin#stat">${ic('log')}Statystyki</a><a href="/admin#flagi">${ic('lock')}Zgłoszenia</a><a href="/admin#gracze">${ic('users')}Gracze</a><a href="/admin#ogl">${pi('announce', 20, 'inl')}Ogłoszenia</a></div>`;
+const nav = `<div class="seg"><a href="/admin#stat">${ic('log')}Statystyki</a><a href="/admin#flagi">${ic('lock')}Zgłoszenia</a><a href="/admin#gracze">${ic('users')}Gracze</a><a href="/admin#ogl">${pi('announce', 20, 'inl')}Ogłoszenia</a><a href="/admin#wyd">${ic('event')}Wydarzenia</a></div>`;
 
-export function panel({ user, st, flash, s, flags, players, q, anns, logs, now }) {
+export function panel({ user, st, flash, s, flags, players, q, anns, logs, events = [], now }) {
   const tile = (v, l, cls = '') => `<div class="ad-tile ${cls}"><b>${fmt(v)}</b><small>${l}</small></div>`;
   const max = Math.max(1, ...s.perDay.map((d) => d.n));
   const chart = `<div class="ad-chart" aria-label="Rejestracje z 14 dni">${s.perDay.map((d) => `<i style="height:${Math.max(4, Math.round((d.n / max) * 100))}%" title="${d.n}"><span>${d.n || ''}</span></i>`).join('')}</div><small class="muted">Nowe konta – ostatnie 14 dni</small>`;
@@ -44,6 +45,16 @@ export function panel({ user, st, flash, s, flags, players, q, anns, logs, now }
       <select name="hours"><option value="6">6 godzin</option><option value="24" selected>24 godziny</option><option value="72">3 dni</option><option value="168">7 dni</option></select></div>
       <button class="btn cta wide">${pi('announce', 24, 'inl')} Opublikuj</button></form>
     ${an}</section>
+  <section class="card" id="wyd"><h3 class="with-ic">${ic('event', 'acc')} Wydarzenia</h3>
+    <p class="muted small">Harmonogram rusza sam (leniwie, przy wejściu graczy): ${EV.SCHEDULE.map((r) => `${EV.KINDS[r.kind].name} – ${r.label}`).join(' · ')}.</p>
+    <form method="post" action="/admin/wydarzenie" class="mk-form">
+      <div class="mk-in"><select name="kind">${Object.values(EV.KINDS).map((k) => `<option value="${k.id}">${k.name}</option>`).join('')}</select>
+      <select name="hours"><option value="1">1 godzina</option><option value="2" selected>2 godziny</option><option value="6">6 godzin</option><option value="24">24 godziny</option><option value="48">48 godzin</option></select>
+      <input name="goal" type="number" min="10" max="100000" value="150" aria-label="Cel inwazji (punkty)" title="Cel inwazji (punkty)"></div>
+      <button class="btn cta wide">${ic('event')} Uruchom teraz</button></form>
+    ${events.map((e) => `<div class="item"><span class="grow"><span class="ad-kind ${e.kind === 'inwazja' ? 'bad' : 'warn'}">${EV.KINDS[e.kind]?.name || esc(e.kind)}</span>${e.test ? ' <small class="muted">[test]</small>' : ''} <small class="muted">${e.source === 'admin' ? `ręcznie (${esc(e.created_by)})` : 'harmonogram'}</small>
+      <br><small class="muted">${when(Number(e.starts_at))} → ${when(Number(e.ends_at))}${e.kind === 'inwazja' ? ` · postęp ${fmt(e.progress)}/${fmt(e.goal)}${e.settled ? (e.success ? ' · ✅ sukces' : ' · ❌ porażka') : ''}` : ''}</small></span>
+      ${e.ends_at > now && e.starts_at <= now ? `<form method="post" action="/admin/wydarzenie/${Number(e.id)}/zakoncz"><button class="btn sm">Zakończ</button></form>` : ''}</div>`).join('') || '<p class="muted small">Brak wydarzeń.</p>'}</section>
   ${lg ? `<section class="card"><h3 class="with-ic">${ic('log', 'acc')} Dziennik działań</h3><ul class="mk-hist">${lg}</ul></section>` : ''}` });
 }
 

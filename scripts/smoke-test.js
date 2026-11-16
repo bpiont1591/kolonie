@@ -657,6 +657,73 @@ check(r.status === 200, 'Manifest PWA');
   }
 }
 
+// ---------- v6 etap 3: wydarzenia czasowe ----------
+{
+  const cool = async () => { if (DEV) await E.post('/api/dev/przewin', { minutes: 120 }); else await sleep(4300); };
+  let ev = (await E.get('/api/wydarzenia')).data;
+  check(ev.ok && ev.upcoming.length >= 3 && ev.upcoming.every((o) => o.starts > Date.now() && o.ends > o.starts), 'Wydarzenia: harmonogram najbliższych wydarzeń', ev.upcoming.map((o) => o.kind).join(', '));
+  if (DEV) {
+    const sat = ev.next?.inwazja?.starts;
+    r = await E.post('/api/dev/harmonogram', { at: sat + 3600_000 });
+    const c = r.data.created || [];
+    check(r.data.ok && c.length === 1 && c[0].kind === 'inwazja' && c[0].source === 'auto' && c[0].goal >= 150 && r.data.settled, 'Wydarzenia: leniwy start i koniec z harmonogramu (bez crona, bez duplikatów)', c.map((x) => x.ekey).join() || JSON.stringify(r.data).slice(0, 200));
+  }
+  const already = ev.active.map((e) => e.kind);
+  if (!already.includes('inwazja')) {
+    r = await E.post('/wydarzenia/walcz');
+    check(!r.data.ok && /inwazji/.test(r.data.msg), 'Wydarzenia: najeźdźcy tylko podczas inwazji', r.data.msg);
+  }
+  if (TOKEN) {
+    const ADM = new Client(`Adm_${suffix}`, { ...fpOf('adm6'), 'x-admin-token': TOKEN });
+    await ADM.post('/rejestracja', { username: ADM.name, password: 'admin1234' });
+    r = await new Client('anon').post('/admin/wydarzenie', { kind: 'inwazja' });
+    check(r.status === 401 || r.status === 403 || !r.data.ok, 'Wydarzenia: uruchamianie tylko dla admina');
+    r = await ADM.post('/admin/wydarzenie', { kind: 'inwazja', hours: 1, goal: 10 });
+    const invId = r.data.id;
+    check(r.data.ok && invId, 'Wydarzenia: admin uruchamia inwazję ręcznie', r.data.msg);
+    ev = (await E.get('/api/wydarzenia')).data;
+    const inv = ev.active.find((e) => e.id === invId);
+    check(inv && inv.goal === 10 && inv.source === 'admin', 'Wydarzenia: inwazja widoczna dla graczy (testowych)');
+    r = await E.get('/kolonia', false);
+    check(r.data.includes('class="evbar"') && r.data.includes('Inwazja obcych'), 'Wydarzenia: pasek ogłoszenia u góry strony');
+    r = await E.get('/wydarzenia', false);
+    check(r.data.includes('ev_inwazja.webp') && r.data.includes('Walcz z najeźdźcą') && r.data.includes('pkt serwera'), 'Wydarzenia: strona z globalnym paskiem postępu');
+    let pts = 0;
+    if (DEV) await E.post('/api/dev/poziom', { level: 8 });
+    for (let i = 0; i < 4 && pts < 6; i++) { await cool(); r = await E.post('/wydarzenia/walcz'); if (r.data.won) pts += r.data.points; }
+    check(pts >= 3 && r.data.battleId, 'Wydarzenia: walka z najeźdźcą daje punkty serwera', `+${pts} pkt`);
+    if (r.data.battleId) { const bl = (await E.get(`/bitwa/${r.data.battleId}`, false)).data; check(bl.includes('p_xeno.webp') && bl.includes('/wydarzenia/walcz'), 'Wydarzenia: raport z najeźdźcą'); }
+    await cool();
+    const before = await E.post('/kampania/walcz/1-1');
+    r = await ADM.post('/admin/wydarzenie', { kind: 'lupy', hours: 1 });
+    check(r.data.ok, 'Wydarzenia: admin uruchamia podwójne łupy', r.data.msg);
+    const lootId = r.data.id;
+    await cool();
+    const during = await E.post('/kampania/walcz/1-1');
+    if (before.data.won && during.data.won) check(during.data.reward.metal / before.data.reward.metal > 1.5, 'Wydarzenia: podwójne łupy działają', `🔩${before.data.reward.metal} → 🔩${during.data.reward.metal}`);
+    ev = (await E.get('/api/wydarzenia')).data;
+    const invNow = ev.active.find((e) => e.id === invId);
+    check(invNow.progress >= pts + (before.data.won ? 2 : 0) + (during.data.won ? 2 : 0) && ev.myPoints === invNow.progress, 'Wydarzenia: misje kampanii też liczą się do inwazji', `${invNow.progress}/${invNow.goal}`);
+    r = await ADM.post('/admin/wydarzenie', { kind: 'happy', hours: 1 });
+    const happyId = r.data.id;
+    await cool();
+    r = await E.post('/ekspedycje/wyslij/zwiad');
+    check(r.data.ok && r.data.bonus === 100 && /Happy hour/.test(r.data.msg), 'Wydarzenia: happy hour – ekspedycja z podwójnymi łupami', r.data.msg);
+    await E.post('/ekspedycje/zawroc');
+    r = await ADM.get('/admin', false);
+    check(r.data.includes('id="wyd"') && r.data.includes('Uruchom teraz') && r.data.includes('Zakończ'), 'Wydarzenia: sekcja w panelu admina');
+    for (const id of [invId, lootId, happyId]) r = await ADM.post(`/admin/wydarzenie/${id}/zakoncz`);
+    check(r.data.ok, 'Wydarzenia: admin kończy wydarzenie');
+    ev = (await E.get('/api/wydarzenia')).data;
+    const cl = ev.claims.find((c) => c.id === invId);
+    check(!ev.active.some((e) => [invId, lootId, happyId].includes(e.id)) && cl && cl.success === (invNow.progress >= 10), 'Wydarzenia: koniec rozliczony leniwie (sukces/porażka)', `sukces=${cl?.success}, ${cl?.points} pkt`);
+    r = await E.post(`/wydarzenia/odbierz/${invId}`);
+    check(cl?.points >= 5 ? r.data.ok && r.data.reward.crystal > 0 : !r.data.ok, 'Wydarzenia: nagroda za udział w inwazji', r.data.msg);
+    r = await E.post(`/wydarzenia/odbierz/${invId}`);
+    check(!r.data.ok, 'Wydarzenia: nagroda tylko raz', r.data.msg);
+  }
+}
+
 // ---------- v5 etap 5: panel admina, bany, ogłoszenia, ochrona przed botami ----------
 r = await M2.get('/admin', false);
 check(r.status === 404, 'Admin: panel ukryty przed zwykłym graczem');

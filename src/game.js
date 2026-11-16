@@ -132,7 +132,7 @@ export async function settle(t, u, now) {
       c.ex_until = 0;
       if (!ex) continue;
       const kind = R.EXPEDITIONS[ex.kind] || R.EXPEDITIONS.zwiad;
-      const res = R.expeditionResult(kind, c.level, R.labBonus(c) * R.lootMult(c, 'expLoot') * (c._expMult || 1));
+      const res = R.expeditionResult(kind, c.level, R.labBonus(c) * R.lootMult(c, 'expLoot') * (1 + (Number(ex.bonus) || 0) / 100));
       collectAt(at);
       const maxHp = R.shipStats(c).maxHp;
       c.hp = Math.max(1, Math.round(c.hp - res.dmg * maxHp)); c.hp_at = Math.max(c.hp_at, at);

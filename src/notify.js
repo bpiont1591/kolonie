@@ -4,5 +4,7 @@ export const N = {
   send: async () => 0,
   /** toCorp(corpId, exceptUserId, payload) */
   toCorp: async () => 0,
+  /** toAll(payload, testOnly) */
+  toAll: async () => 0,
 };
 export const fire = (fn) => setImmediate(() => Promise.resolve().then(fn).catch((e) => console.error('push:', e.message)));

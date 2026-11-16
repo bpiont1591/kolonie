@@ -4,6 +4,7 @@ import * as G from '../game.js';
 import { fail } from '../game.js';
 import { dur } from '../time.js';
 import * as V from '../views.js';
+import * as EVF from './events.js';
 
 export default function registerExpeditions({ app, db, auth, page, action }) {
   const list = (uid) => db.all('SELECT * FROM expeditions WHERE user_id = ? ORDER BY id DESC LIMIT 10', [uid]);
@@ -30,10 +31,11 @@ export default function registerExpeditions({ app, db, auth, page, action }) {
     if (hp < ship.maxHp * R.EXPEDITION_MIN_HP) fail(`Statek musi mieć min. ${R.EXPEDITION_MIN_HP * 100}% HP (${hp}/${ship.maxHp}).`);
     if (u.energy < kind.energy) fail(`Za mało energii w magazynie (potrzeba ⚡${kind.energy}).`);
     const until = now + kind.h * 3600_000;
-    const id = await t.insert("INSERT INTO expeditions (user_id, kind, started_at, return_at, status, result) VALUES (?, ?, ?, ?, 'active', '{}')", [u.id, kind.id, now, until]);
+    const happy = EVF.isOn(await EVF.activeEvents(t, now, !!u.is_test), 'happy') ? 100 : 0; // Happy hour: podwójne łupy dla wysłanych teraz
+    const id = await t.insert("INSERT INTO expeditions (user_id, kind, started_at, return_at, status, result, bonus) VALUES (?, ?, ?, ?, 'active', '{}', ?)", [u.id, kind.id, now, until, happy]);
     await t.run('UPDATE users SET energy = energy - ?, ex_until = ?, hp = ?, hp_at = ? WHERE id = ?', [kind.energy, until, hp, now, u.id]);
     await G.track(t, u.id, now, { expedition: 1, energy: kind.energy });
-    return { msg: `${kind.name}: statek wystartował! Powrót za ${dur(until - now)}.`, data: { expeditionId: id, until } };
+    return { msg: `${kind.name}: statek wystartował! Powrót za ${dur(until - now)}.${happy ? ' Happy hour: łupy ×2!' : ''}`, data: { expeditionId: id, until, bonus: happy } };
   }));
 
   app.post('/ekspedycje/zawroc', auth, action('/ekspedycje', async (t, u, now) => {

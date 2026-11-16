@@ -338,6 +338,32 @@ export const MIGRATIONS = [
     "ALTER TABLE users ADD COLUMN relics TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE users ADD COLUMN camp_chests TEXT NOT NULL DEFAULT ''",
   ]],
+  ['013_events', [
+    `CREATE TABLE IF NOT EXISTS events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      kind TEXT NOT NULL,
+      ekey TEXT NOT NULL UNIQUE,
+      starts_at INTEGER NOT NULL,
+      ends_at INTEGER NOT NULL,
+      goal INTEGER NOT NULL DEFAULT 0,
+      progress INTEGER NOT NULL DEFAULT 0,
+      source TEXT NOT NULL DEFAULT 'auto',
+      test INTEGER NOT NULL DEFAULT 0,
+      settled INTEGER NOT NULL DEFAULT 0,
+      success INTEGER NOT NULL DEFAULT 0,
+      created_by TEXT NOT NULL DEFAULT '',
+      created_at INTEGER NOT NULL
+    )`,
+    'CREATE INDEX IF NOT EXISTS events_time ON events(ends_at, starts_at)',
+    `CREATE TABLE IF NOT EXISTS event_points (
+      event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      points INTEGER NOT NULL DEFAULT 0,
+      claimed INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (event_id, user_id)
+    )`,
+    'ALTER TABLE expeditions ADD COLUMN bonus INTEGER NOT NULL DEFAULT 0',
+  ]],
 ];
 
 async function migrate(api, conv = (s) => s) {

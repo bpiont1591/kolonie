@@ -2,6 +2,9 @@
 import * as AD from '../admin.js';
 import { adminTokenOk, linkedAccounts } from '../security.js';
 import * as VA from '../views-admin.js';
+import * as EV from '../events.js';
+import { resetEventsCache, settleEnded } from './events.js';
+import { N, fire } from '../notify.js';
 
 const DAY = 86400_000;
 export const stats = { blockedPosts: 0, honeypot: 0, regLimit: 0 }; // liczniki od startu serwera
@@ -76,7 +79,8 @@ export default function registerAdmin({ app, db, auth, page, respond, wantsJson 
       : await db.all('SELECT id, username, level, created_at, banned_until, role, is_test FROM users ORDER BY id DESC LIMIT 15');
     const anns = await db.all('SELECT * FROM announcements ORDER BY id DESC LIMIT 10');
     const logs = await db.all('SELECT * FROM admin_log ORDER BY id DESC LIMIT 15');
-    return VA.panel({ user: req.user, st, flash: req.flash, s: await getStats(now), flags: await openFlags(), players, q, anns, logs, now });
+    const events = await db.all('SELECT * FROM events WHERE ends_at > ? OR id IN (SELECT id FROM events ORDER BY id DESC LIMIT 5) ORDER BY starts_at DESC LIMIT 8', [now]);
+    return VA.panel({ user: req.user, st, flash: req.flash, s: await getStats(now), flags: await openFlags(), players, q, anns, logs, events, now });
   }));
   app.get('/admin/gracz/:id', auth, guard, page(async (req, now, st) => {
     const p = await db.get('SELECT * FROM users WHERE id = ?', [Number(req.params.id) || 0]);
@@ -139,6 +143,30 @@ export default function registerAdmin({ app, db, auth, page, respond, wantsJson 
     resetAnn();
     await log(req.adminName, 'announce', `${audience === 'test' ? '[test] ' : ''}${text}`, now);
     return { msg: 'Ogłoszenie opublikowane.', data: { id } };
+  }));
+  // Ręczne uruchomienie wydarzenia (np. inwazji poza weekendem). Wydarzenia z kont testowych widzą tylko konta testowe.
+  app.post('/admin/wydarzenie', auth, guard, act('/admin#wyd', async (req, now) => {
+    const kind = EV.KINDS[req.body.kind] ? req.body.kind : null;
+    if (!kind) return { ok: false, msg: 'Wybierz rodzaj wydarzenia.' };
+    const hours = Math.min(72, Math.max(1, Number(req.body.hours) || 2));
+    const test = req.user.is_test ? 1 : 0;
+    if (await db.get('SELECT id FROM events WHERE kind = ? AND starts_at <= ? AND ends_at > ? AND test = ?', [kind, now, now, test])) return { ok: false, msg: `${EV.KINDS[kind].name} już trwa.` };
+    const goal = kind === 'inwazja' ? Math.min(100000, Math.max(10, Number(req.body.goal) || 150)) : 0;
+    const id = await db.insert(`INSERT INTO events (kind, ekey, starts_at, ends_at, goal, source, test, created_by, created_at) VALUES (?, ?, ?, ?, ?, 'admin', ?, ?, ?)`,
+      [kind, `admin:${kind}:${now}`, now, now + hours * 3600_000, goal, test, req.adminName, now]);
+    resetEventsCache();
+    fire(() => N.toAll({ title: `${EV.KINDS[kind].name} – start!`, body: EV.KINDS[kind].desc.slice(0, 160), url: '/wydarzenia', tag: `ev-${kind}` }, !!test));
+    await log(req.adminName, 'event_start', `${test ? '[test] ' : ''}${kind} ${hours} h`, now);
+    return { msg: `Uruchomiono: ${EV.KINDS[kind].name} na ${hours} h.`, data: { id, goal } };
+  }));
+  app.post('/admin/wydarzenie/:id/zakoncz', auth, guard, act('/admin#wyd', async (req, now) => {
+    const e = await db.get('SELECT * FROM events WHERE id = ?', [Number(req.params.id) || 0]);
+    if (!e || e.ends_at <= now) return { ok: false, msg: 'To wydarzenie już się zakończyło.' };
+    await db.run('UPDATE events SET ends_at = ? WHERE id = ?', [now, e.id]);
+    await settleEnded(db, now);
+    resetEventsCache();
+    await log(req.adminName, 'event_end', `${e.test ? '[test] ' : ''}#${e.id} ${e.kind}`, now);
+    return { msg: `Zakończono: ${EV.KINDS[e.kind]?.name || e.kind}.` };
   }));
   app.post('/admin/ogloszenie/:id/wylacz', auth, guard, act('/admin', async (req, now) => {
     await db.run('UPDATE announcements SET active = 0 WHERE id = ?', [Number(req.params.id) || 0]);

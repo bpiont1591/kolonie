@@ -39,7 +39,15 @@ export default function registerPush({ app, db, auth }) {
     for (const m of ms) n += await send(Number(m.user_id), payload);
     return n;
   }
-  N.send = send; N.toCorp = toCorp;
+  /** Do wszystkich subskrybentów (testOnly – tylko konta testowe). */
+  async function toAll(payload, testOnly = false) {
+    if (!enabled) return 0;
+    const ms = await db.all(`SELECT DISTINCT p.user_id FROM push_subs p JOIN users u ON u.id = p.user_id WHERE u.is_test = ? OR ? = 0 LIMIT 1000`, [testOnly ? 1 : 0, testOnly ? 1 : 0]);
+    let n = 0;
+    for (const m of ms) n += await send(Number(m.user_id), payload);
+    return n;
+  }
+  N.send = send; N.toCorp = toCorp; N.toAll = toAll;
 
   // Skaner (co minutę): zakończone budowy/moduły, powrót z ekspedycji, pełny magazyn – dla graczy z subskrypcją.
   let scanning = false;

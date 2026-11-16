@@ -45,8 +45,9 @@ logo.resize((1160 // 2, 320 // 2), Image.LANCZOS)  # sanity
 for n in ['ship']: webp(Image.open(f'{GEN}/{n}.jpg'), n, 512, 72)
 for n in ['cls_szturmowiec', 'cls_krazownik', 'cls_zwiadowca', 'cls_wsparcie']: webp(Image.open(f'{GEN}/{n}.jpg'), n, 400, 70)
 for i in range(1, 6): webp(Image.open(f'{GEN}/pl_{i}.jpg'), f'pl_{i}', 360, 68); webp(Image.open(f'{GEN}/cb_{i}.jpg'), f'cb_{i}', 400, 70)
+for n in ['ev_inwazja', 'ev_lupy', 'ev_happy']: webp(Image.open(f'{GEN}/{n}.jpg'), n, 720, 66)
 for n in ['b_mine', 'b_power', 'b_shipyard', 'b_lab']: webp(Image.open(f'{GEN}/{n}.jpg'), n, 320, 70)
-for n in ['p_zwiadowca', 'p_korsarz', 'p_krazownik', 'p_dreadnought']: webp(Image.open(f'{GEN}/{n}.jpg'), n, 320, 70)
+for n in ['p_zwiadowca', 'p_korsarz', 'p_krazownik', 'p_dreadnought', 'p_xeno']: webp(Image.open(f'{GEN}/{n}.jpg'), n, 320, 70)
 for n in ['r_metal', 'r_crystal', 'r_energy']:
     im = Image.open(f'{GEN}/{n}.jpg').crop((112, 112, 912, 912))
     webp(circle_fade(im, 0.55, 1.0), n, 128, 80)

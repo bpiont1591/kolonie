@@ -12,6 +12,8 @@ export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&a
 /** Tytuł przy nicku (z osiągnięć). */
 export const ttl = (id) => { const t = titleOf(id); return t ? ` <span class="ttl">${esc(t)}</span>` : ''; };
 /** Pasek ogłoszeń administracji (dla zalogowanych). */
+const EV_NAMES = { inwazja: ['Inwazja obcych', 'ev-inv'], lupy: ['Podwójne łupy', 'ev-loot'], happy: ['Happy hour ekspedycji', 'ev-happy'] };
+const evBar = (evs, now = Date.now()) => (evs?.length ? `<a class="evbar" href="/wydarzenia">${evs.map((e) => { const [n, c] = EV_NAMES[e.kind] || [e.kind, '']; return `<span class="evb ${c}">${ic('event')}<b>${n}</b>${e.kind === 'inwazja' && e.goal ? `<i class="evb-bar"><i style="width:${Math.min(100, Math.round((e.progress / e.goal) * 100))}%"></i></i><small>${Math.min(100, Math.round((e.progress / e.goal) * 100))}%</small>` : ''}<small>· <span data-countdown="${e.ends}">${dur(e.ends - now)}</span></small></span>`; }).join('')}${ic('up', 'chev-r')}</a>` : '');
 const annBar = (anns) => (anns?.length ? anns.map((a) => `<div class="ann ${esc(a.kind)}" data-ann="${Number(a.id)}" role="status">${pi('announce', 30, 'inl')}<span class="grow">${esc(a.text)}</span><button type="button" class="ann-x" aria-label="Zamknij" data-ann-x>×</button></div>`).join('') : '');
 export const fmt = (n) => Math.floor(n).toLocaleString('pl-PL');
 export const ago = (ts, now) => {
@@ -70,7 +72,7 @@ export function layout({ title, user, st, body, flash, active = '', head = '', b
   const nav = user ? `<nav class="tabs">${tabs.map(([id, href, icon, label]) =>
     `<a href="${href}" class="${active === id ? 'on' : ''}"${active === id ? ' aria-current="page"' : ''}>${ic(icon)}<span>${label}</span>${st?.badges?.[id] ? `<i class="badge">${st.badges[id] > 9 ? '9+' : st.badges[id]}</i>` : ''}</a>`).join('')}</nav>` : '';
   const tb = user && st?.tut ? tutBar(st.tut, active) : '';
-  const ann = user ? annBar(st?.ann) : '';
+  const ann = user ? annBar(st?.ann) + evBar(st?.events) : '';
   const fl = flash ? `<div class="flash ${flash.ok ? 'ok' : 'err'}" role="status">${emo(esc(flash.msg))}</div>` : '';
   const fullTitle = title.includes('Kolonie') ? title : `${title} · Kolonie`;
   return `<!doctype html><html lang="pl"><head><meta charset="utf-8">
@@ -453,6 +455,7 @@ export function battle({ user, st, flash, targets, recent, now, arena }) {
     ${away ? `<p class="warn small with-ic">${pi('expedition', 26)} Statek jest na ekspedycji – wróci za <b data-countdown="${user.ex_until}" data-reload>${dur(user.ex_until - now)}</b>. Bitwy niedostępne.</p>` : ''}
     ${enough ? '' : `<p class="warn small">Statek jest zbyt uszkodzony (min. ${R.MIN_HP_RATIO * 100}% HP). Poczekaj na naprawę.</p>`}</section>
   ${arena ? `<a class="callout arena-cta" href="/arena">${pi('arena', 56)}<span class="grow"><b>Arena – turniej o ${clockHM(arena.next)}</b><br><small class="muted">${arena.joined ? 'Jesteś zapisany ✓' : 'Zapisy otwarte'} · ${arena.n} ${plural(arena.n, 'gracz', 'graczy', 'graczy')} · start za <b data-countdown="${arena.next}">${dur(arena.next - now)}</b></small></span>${ic('up', 'chev-r')}</a>` : ''}
+  <a class="callout ev-cta" href="/wydarzenia">${ic('event', 'big-ev')}<span class="grow"><b>Wydarzenia</b><br><small class="muted">${st?.events?.length ? `Trwa: ${st.events.map((e) => (EV_NAMES[e.kind] || [e.kind])[0]).join(', ')}` : 'Inwazje obcych, podwójne łupy, happy hour ekspedycji'}</small></span>${ic('up', 'chev-r')}</a>
   <a class="callout camp-cta" href="/kampania">${img('pl_5', 'Kampania', 'camp-ic', 56)}<span class="grow"><b>Kampania: Sygnał z Otchłani</b><br><small class="muted">5 planet · misje fabularne · bossowie z unikalnym łupem</small></span>${ic('up', 'chev-r')}</a>
   <section class="card"><h3 class="with-ic">${pi('defeat', 30)} Piraci</h3>${pir}</section>
   <section class="card"><h3 class="with-ic">${pi('pvp', 30)} Inni gracze</h3><p class="muted small">Wygrana = łup 10% metalu i kryształów rywala. Zaatakowany gracz dostaje 15 min ochrony.</p>${tg}</section>
@@ -469,13 +472,14 @@ export function battleLog({ user, st, flash, b, now }) {
   const camp = rw.camp ? rw.camp.split('-').map(Number) : null;
   const campLine = camp && mine ? `<p class="camp-res">${[1, 2, 3].map((i) => ic(i <= (rw.stars || 0) ? 'starf' : 'star', i <= (rw.stars || 0) ? 'on' : '')).join('')}</p>${rw.relic && P.RELICS[rw.relic] ? `<p class="relic-drop">${ic('starf', 'acc')} Unikalny łup: <b>${P.RELICS[rw.relic].name}</b> – ${P.RELICS[rw.relic].desc}</p>` : ''}${rw.core ? `<p class="reward"><span>${pi('core', 22, 'inl')}Rdzeń kwantowy</span></p>` : ''}` : '';
   const again = camp && mine ? `<form method="post" action="/kampania/walcz/${esc(rw.camp)}"><button class="btn danger wide">${ic('battle')} Walcz ponownie</button></form><a class="btn wide" href="/kampania/${camp[0]}">${ic('planet')} Mapa rozdziału</a>`
+    : rw.tier === 'xeno' && mine ? `<form method="post" action="/wydarzenia/walcz"><button class="btn danger wide">${ic('battle')} Walcz ponownie</button></form><a class="btn wide" href="/wydarzenia">${ic('event')} Wydarzenia</a>`
     : b.kind === 'pve' && mine ? `<form method="post" action="/bitwa/piraci/${esc(rw.tier)}"><button class="btn danger wide">${ic('battle')} Walcz ponownie</button></form>` : '';
   return layout({ title: 'Raport z bitwy', user, st, flash, active: 'bitwa', body: `
   <section class="card center result banner ${won ? 'win' : 'lose'}" style="--bg:url('/img/battle_bg.webp?v=${V}')">
     ${camp ? img(rw.boss ? `cb_${camp[0]}` : `pl_${camp[0]}`, b.enemy_name, 'enemy', 120, true) : b.kind === 'pve' && rw.tier ? img('p_' + rw.tier, b.enemy_name, 'enemy', 120, true) : pi(won ? 'trophy' : 'defeat', 120, 'big-ic')}
     <h2>${won ? 'ZWYCIĘSTWO' : 'PORAŻKA'}</h2>
     <p>${esc(b.attacker_name)} <span class="muted">vs</span> ${esc(b.kind === 'pve' ? b.enemy_name : b.defender_name)}</p>
-    ${campLine}${mine && rewardLine ? `<p class="reward">${rewardLine}</p>` : ''}
+    ${rw.evPts && mine ? `<p class="relic-drop">${ic('event', 'acc')} +${rw.evPts} pkt dla serwera w inwazji</p>` : ''}${campLine}${mine && rewardLine ? `<p class="reward">${rewardLine}</p>` : ''}
     <p class="muted small">${ago(b.created_at, now)}</p>
   </section>
   <section class="card"><h3>Przebieg</h3><ol class="log">${log.map((l) => `<li class="${l.side}"><span class="r">R${l.r}</span>${emo(esc(l.t))}</li>`).join('')}</ol></section>
