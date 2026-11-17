@@ -379,6 +379,13 @@ export const MIGRATIONS = [
     "ALTER TABLE users ADD COLUMN gear TEXT NOT NULL DEFAULT ''",
     'ALTER TABLE users ADD COLUMN peak_level INTEGER NOT NULL DEFAULT 0',
   ]],
+  ['015_prestige', [
+    'ALTER TABLE users ADD COLUMN prestige INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE users ADD COLUMN pp INTEGER NOT NULL DEFAULT 0',
+    "ALTER TABLE users ADD COLUMN perks TEXT NOT NULL DEFAULT ''",
+    'ALTER TABLE users ADD COLUMN prestige_at INTEGER NOT NULL DEFAULT 0',
+    'CREATE INDEX IF NOT EXISTS users_prestige ON users(prestige, peak_level)',
+  ]],
 ];
 
 async function migrate(api, conv = (s) => s) {

@@ -68,7 +68,7 @@ export default function registerArena({ app, db, auth, page, action, dev }) {
 
   app.get('/arena', auth, pre, page(async (req, now, st) => {
     const sum = await arenaSummary(db, req.user.id, now);
-    const entrants = await db.all(`SELECT u.id, u.username, u.level, u.title, u.s_hull, u.s_guns, u.s_shields FROM arena_entries e JOIN users u ON u.id = e.user_id
+    const entrants = await db.all(`SELECT u.id, u.username, u.level, u.title, u.prestige, u.s_hull, u.s_guns, u.s_shields FROM arena_entries e JOIN users u ON u.id = e.user_id
       WHERE e.t_start = ? ORDER BY e.joined_at ASC LIMIT ?`, [sum.next, AR.MAX_PLAYERS]);
     const last = await db.get("SELECT * FROM arena_tournaments WHERE status = 'done' ORDER BY start DESC LIMIT 1");
     const mine = await db.all('SELECT start, place, reward FROM arena_results WHERE user_id = ? ORDER BY start DESC LIMIT 10', [req.user.id]);

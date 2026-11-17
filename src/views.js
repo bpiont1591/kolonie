@@ -53,6 +53,8 @@ export function hpBar(st) {
 const V = ASSET_V; // wersja zasobów statycznych (cache-busting)
 export const img = (name, alt = '', cls = '', size = 64, eager = false) =>
   `<img src="/img/${name}.webp?v=${V}" alt="${esc(alt)}" class="${cls}" width="${size}" height="${size}" decoding="async"${eager ? '' : ' loading="lazy"'}>`;
+/** v7/4: znak rangi prestiżu przy nicku. */
+export const pBadge = (n) => (Number(n) > 0 ? `<span class="pbadge" title="Prestiż: ranga ${Number(n)}">${ic('prestige')}${Number(n)}</span>` : '');
 export const resIcon = (k, size = 18) => `<img src="/img/r_${k}.webp?v=${V}" alt="${R.RESOURCES[k].name}" title="${R.RESOURCES[k].name}" class="ri" width="${size}" height="${size}">`;
 const SITE_DESC = 'Kolonie – darmowa kosmiczna gra MMORPG w przeglądarce. Zbuduj kolonię na obcej planecie, ulepszaj statek, walcz z piratami i graczami, dołącz do korporacji. Bez instalacji, na telefonie i komputerze.';
 
@@ -65,7 +67,7 @@ export function layout({ title, user, st, body, flash, active = '', head = '', b
     </div>
     ${user._admin ? `<a class="rank-link adm" href="/admin" aria-label="Panel administratora" title="Panel administratora">${pi('admin', 30)}</a>` : ''}
     <a class="rank-link${active === 'ranking' ? ' on' : ''}" href="/ranking" aria-label="Ranking" title="Ranking">${pi('trophy', 30)}</a>
-    <a class="who" href="/osiagniecia" title="Osiągnięcia i tytuły">${lvBadge(user.level, 'sm')}<span>${esc(user.username)}${titleOf(user.title) ? `<small class="who-t">${esc(titleOf(user.title))}</small>` : ''}</span></a>
+    <a class="who" href="/osiagniecia" title="Osiągnięcia i tytuły">${lvBadge(user.level, 'sm')}<span>${esc(user.username)}${pBadge(user.prestige)}${titleOf(user.title) ? `<small class="who-t">${esc(titleOf(user.title))}</small>` : ''}</span></a>
   </header>` : '';
   const tabs = [
     ['kolonia', '/kolonia', 'colony', 'Kolonia'], ['statek', '/statek', 'ship', 'Statek'], ['bitwa', '/bitwa', 'battle', 'Bitwa'],
@@ -138,7 +140,7 @@ export function landing({ online, players, battles24, top, flash, baseUrl, invit
   const stat = (n, label) => `<div class="stat"><b>${fmt(n)}</b><span>${label}</span></div>`;
   const pirates = R.PIRATES.map((p) => `<figure class="pirate-card">${img('p_' + p.id, p.name, '', 160)}
     <figcaption><b>${p.name}</b><small>${p.minLvl > 1 ? `od poziomu ${p.minLvl}` : 'dla każdego'}</small></figcaption></figure>`).join('');
-  const rank = top.length ? top.map((r, i) => `<li><span class="pos">${i + 1}</span><b>${esc(r.username)}</b>${r.tag ? ` <span class="corp">[${esc(r.tag)}]</span>` : ''}<span class="grow"></span>${lvBadge(r.level)}</li>`).join('')
+  const rank = top.length ? top.map((r, i) => `<li><span class="pos">${i + 1}</span><b>${esc(r.username)}</b>${pBadge(r.prestige)}${r.tag ? ` <span class="corp">[${esc(r.tag)}]</span>` : ''}<span class="grow"></span>${lvBadge(r.level)}</li>`).join('')
     : '<li class="muted">Ranking czeka na pierwszego komandora – może to będziesz Ty?</li>';
   return layout({ title, flash, head, bodyClass: 'landing', baseUrl, body: `
   <section class="hero-full">
@@ -406,7 +408,7 @@ export function ship({ user, st, flash, now = Date.now() }) {
   return layout({ title: 'Statek', user, st, flash, active: 'statek', body: `
   <section class="card center ship-card" style="--shield:${Math.min(0.15 + user.s_shields * 0.07, 0.8).toFixed(2)}">
     <div class="ship-art">${img(P.CLASSES[user.ship_class] ? `cls_${user.ship_class}` : 'ship', 'Twój statek', '', 320, true)}</div>
-    <h2>Statek „${esc(user.username)}”</h2>
+    <h2>Statek „${esc(user.username)}” ${pBadge(user.prestige)}</h2>
     ${P.CLASSES[user.ship_class] ? `<a class="cls-badge" href="/statek/klasa">${ic(P.CLASSES[user.ship_class].icon)}${P.CLASSES[user.ship_class].name}</a>` : ''}
     ${hpBar(st)}
     <div class="stats">
@@ -421,6 +423,7 @@ export function ship({ user, st, flash, now = Date.now() }) {
     <a class="callout" href="/statek/klasa"><span class="big-glyph sm">${ic(P.CLASSES[user.ship_class]?.icon || 'ship', 'acc')}</span><span class="grow"><b>Klasa statku</b><br><small>${P.CLASSES[user.ship_class]?.name || 'nie wybrano'}</small></span></a>
     <a class="callout" href="/badania"><span class="big-glyph sm">${ic('flask', 'acc')}</span><span class="grow"><b>Badania</b><br><small>${user.rq_id ? `trwa: ${P.TECH_BY_ID[user.rq_id]?.name}` : `${P.rpFree(user)} wolnych PB`}</small></span></a>
   </div>
+  <a class="callout ${user.level >= 50 ? 'gold' : ''}" href="/odrodzenie"><span class="big-glyph sm">${ic('prestige', 'gold-ic')}</span><span class="grow"><b>Odrodzenie (prestiż)</b> ${pBadge(user.prestige)}<br><small>${user.level >= 50 ? 'dostępne – zacznij od nowa silniejszy' : `od poziomu 50 · ${user.pp ? `${user.pp} PP do wydania` : 'stałe bonusy i ranga przy nicku'}`}</small></span>${ic('up', 'chev-r')}</a>
   <a class="callout rare" href="/statek/moduly"><span class="big-glyph sm">${ic('gem', 'acc')}</span><span class="grow"><b>Moduły specjalne</b><br><small>${GE.slotCount(user) ? `${GE.gearList(user).length}/${GE.slotCount(user)} slotów zajętych` : `pierwszy slot od poziomu ${GE.SLOT_LVLS[0]}`} · rzadkie łupy z bossów</small></span>${ic('up', 'chev-r')}</a>
   ${expeditionCallout(user, now)}
   <section class="card"><h3 class="with-ic">${ic('ship', 'acc')} Moduły</h3><p class="muted small">Limit poziomu modułów: ${cap} (2 × poziom stoczni). Za surowce z magazynu głównego.</p>${mods}</section>` });
@@ -490,21 +493,21 @@ export function battleLog({ user, st, flash, b, now }) {
 }
 
 export function ranking({ user, st, flash, tab, rows, myRank }) {
-  const tabs = [['gracze', 'Poziom', 'xp'], ['pvp', 'PvP', 'pvp'], ['korporacje', 'Korpo', 'corp']];
-  const head = `<div class="seg">${tabs.map(([id, l, icn]) => `<a href="/ranking?tab=${id}" class="${tab === id ? 'on' : ''}">${pi(icn, 22, 'inl')}${l}</a>`).join('')}<a href="/sezon/ranking">${pi('season', 22, 'inl')}Sezon</a></div>`;
+  const tabs = [['gracze', 'Poziom', 'xp'], ['pvp', 'PvP', 'pvp'], ['prestiz', 'Prestiż', null], ['korporacje', 'Korpo', 'corp']];
+  const head = `<div class="seg rank-tabs">${tabs.map(([id, l, icn]) => `<a href="/ranking?tab=${id}" class="${tab === id ? 'on' : ''}">${icn ? pi(icn, 22, 'inl') : ic('prestige', 'gold-ic')}${l}</a>`).join('')}<a href="/sezon/ranking">${pi('season', 22, 'inl')}Sezon</a></div>`;
   let body;
   if (tab === 'korporacje') {
     body = rows.map((c, i) => `<div class="item rank"><span class="pos">${i + 1}</span><span class="grow"><b>${esc(c.name)}</b> <span class="corp">[${esc(c.tag)}]</span>
       <br><small class="muted">${c.members} członków</small></span><b class="pts">${pi('power', 20, 'inl')}${fmt(c.power)}</b></div>`).join('');
   } else {
     body = rows.map((r, i) => `<div class="item rank ${r.id === user.id ? 'me' : ''}"><span class="pos">${i + 1}</span>
-      <span class="grow"><b>${esc(r.username)}</b>${ttl(r.title)} ${r.tag ? `<span class="corp">[${esc(r.tag)}]</span>` : ''}<br>
-      <small class="muted">${tab === 'pvp' ? `${r.pvp_wins} W / ${r.pvp_losses} P` : `${fmt(r.xp)} XP · ${r.pve_wins} piratów`}</small></span>
-      ${tab === 'pvp' ? `<b class="pts">${pi('pvp', 20, 'inl')}${r.pvp_points}</b>` : lvBadge(r.level)}</div>`).join('');
+      <span class="grow"><b>${esc(r.username)}</b>${pBadge(r.prestige)}${ttl(r.title)} ${r.tag ? `<span class="corp">[${esc(r.tag)}]</span>` : ''}<br>
+      <small class="muted">${tab === 'pvp' ? `${r.pvp_wins} W / ${r.pvp_losses} P` : tab === 'prestiz' ? `najwyższy poziom ${Math.max(r.peak_level || 0, r.level)} · teraz poz. ${r.level}` : `${fmt(r.xp)} XP · ${r.pve_wins} piratów`}</small></span>
+      ${tab === 'pvp' ? `<b class="pts">${pi('pvp', 20, 'inl')}${r.pvp_points}</b>` : tab === 'prestiz' ? `<b class="pts pr-pts">${ic('prestige', 'gold-ic')}${r.prestige}</b>` : lvBadge(r.level)}</div>`).join('');
   }
   return layout({ title: 'Ranking', user, st, flash, active: 'ranking', body: `
-  <section class="card">${head}${myRank ? `<p class="muted small">Twoja pozycja: <b>#${myRank}</b></p>` : ''}
-  ${body || '<p class="muted">Pusto.</p>'}</section>` });
+  <section class="card">${head}${myRank ? `<p class="muted small">Twoja pozycja: <b>#${myRank}</b></p>` : tab === 'prestiz' ? `<p class="muted small">Ranking graczy po Odrodzeniu (ranga prestiżu, potem najwyższy osiągnięty poziom). <a href="/odrodzenie">Jak się odrodzić?</a></p>` : ''}
+  ${body || `<p class="muted">${tab === 'prestiz' ? 'Nikt jeszcze się nie odrodził – bądź pierwszy od 50. poziomu!' : 'Pusto.'}</p>`}</section>` });
 }
 
 export function notFound({ user, st }) {

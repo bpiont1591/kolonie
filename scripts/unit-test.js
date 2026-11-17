@@ -12,6 +12,7 @@ import * as MK from '../src/market.js';
 import * as RF from '../src/referral.js';
 import * as AD from '../src/admin.js';
 import * as GE from '../src/gear.js';
+import * as PS from '../src/prestige.js';
 import * as PR from '../src/progression.js';
 import * as CA from '../src/campaign.js';
 import * as EV from '../src/events.js';
@@ -251,6 +252,18 @@ t('Moduły specjalne: rzadkość, efekty, sloty, łupy, rozbiór', () => {
   const a = { name: 'A', maxHp: 200, hp: 100, atk: 40, def: 0, leech: 0.5 }, d = { name: 'B', maxHp: 400, hp: 400, atk: 10, def: 0, thorns: 0.5 };
   const sim = R.simulate(a, d, () => 0.5);
   assert.ok(sim.log.some((l) => /syfon \+\d+ HP/.test(l.t)) && sim.log.some((l) => /pryzmat odbija/.test(l.t)));
+});
+t('Prestiż: punkty, ulepszenia, bonusy rangi', () => {
+  assert.deepEqual([PS.ppFor(49), PS.ppFor(50), PS.ppFor(54), PS.ppFor(55), PS.ppFor(72)], [0, 5, 5, 7, 13]);
+  assert.deepEqual(PS.perkLevels({ perks: 'wojownik:3,zly:2,archiwa:9' }), { wojownik: 3, archiwa: 5 });
+  assert.equal(PS.perkString({ wojownik: 3, pancerz: 0, archiwa: 1 }), 'wojownik:3,archiwa:1');
+  const u = { level: 1, prestige: 2, perks: 'wojownik:3,archiwa:2', b_lab: 1 };
+  const m = PR.mods(u);
+  assert.ok(Math.abs(m.xp - 0.1) < 1e-9 && Math.abs(m.prod - 0.06) < 1e-9 && Math.abs(m.atk - 0.06) < 1e-9);
+  assert.equal(PR.rpTotal(u), 4);
+  assert.equal(PS.perkCost(0), 1); assert.equal(PS.perkCost(4), 5);
+  assert.deepEqual(PR.mods({ level: 5 }), PR.mods({ level: 5, prestige: 0, perks: '' })); // bez prestiżu – bez zmian
+  assert.ok(PS.LOSES.length === 3 && PS.KEEPS.length >= 4 && PS.rankName(1) === 'Odrodzony' && PS.rankName(5) === 'Legenda');
 });
 t('Kampania: dane, odblokowanie, gwiazdki, nagrody, trofea', () => {
   assert.equal(CA.CHAPTERS.length, 10);

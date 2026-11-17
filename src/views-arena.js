@@ -1,5 +1,5 @@
 // Widoki etapu v5/3: arena (zapisy, drabinka, historia) i osiągnięcia z tytułami.
-import { layout, esc, fmt, rewardChips, ttl, plural, ago } from './views.js';
+import { layout, esc, fmt, rewardChips, ttl, plural, ago, pBadge } from './views.js';
 import { pi, ic, lvBadge } from './icons.js';
 import * as AR from './arena.js';
 import * as A from './achievements.js';
@@ -30,7 +30,7 @@ export function arena({ user, st, flash, sum, entrants, last, mine, now }) {
     ? `<form method="post" action="/arena/wypisz"><button class="btn wide">${ic('logout')} Wypisz się (zwrot ${R.RESOURCES.energy.icon}${AR.ENTRY_ENERGY})</button></form>`
     : `<form method="post" action="/arena/zapisz"><button class="btn cta wide" ${canJoin ? '' : 'disabled'}>${ic('battle')} ${canJoin ? `Zapisz się · ⚡${AR.ENTRY_ENERGY}` : `Od poziomu ${AR.MIN_LEVEL}`}</button></form>`;
   const ent = entrants.length ? entrants.map((e, i) => `<div class="item${e.id === user.id ? ' me' : ''}"><span class="pos">${i + 1}</span>
-    <span class="grow"><b>${esc(e.username)}</b>${ttl(e.title)}<br><small class="muted">siła ${R.power(e)}</small></span>${lvBadge(e.level, 'sm')}</div>`).join('')
+    <span class="grow"><b>${esc(e.username)}</b>${pBadge(e.prestige)}${ttl(e.title)}<br><small class="muted">siła ${R.power(e)}</small></span>${lvBadge(e.level, 'sm')}</div>`).join('')
     : '<p class="muted">Nikt jeszcze się nie zapisał – bądź pierwszy!</p>';
   const rewards = [1, 2, 3, 5, 9].map((p) => `<li>${placeIcon(p, 26)}<span>${AR.placeLabel(p).replace('9.–17. miejsce', 'pozostali')}</span><span class="chips">${rewardChips(Q.scale(AR.placeReward(p), user.level), 13)}</span><small class="muted">+${AR.seasonXpFor(p)} XP sez.</small></li>`).join('');
   const hist = mine.length ? mine.map((r) => `<a class="item link" href="/arena/turniej/${Number(r.start)}">${placeIcon(Number(r.place))}<span class="grow">${AR.placeLabel(Number(r.place))}<br><small class="muted">${when(Number(r.start))}</small></span>${ic('up', 'chev-r')}</a>`).join('')
@@ -74,7 +74,7 @@ export function achievements({ user, st, flash, s, owned, now }) {
     ${user.title ? `<form method="post" action="/osiagniecia/tytul/brak"><button class="tchip off">Bez tytułu</button></form>` : ''}</div>`
     : '<p class="muted small">Zdobądź osiągnięcie z tytułem, by wyświetlać go przy nicku.</p>';
   return layout({ title: 'Osiągnięcia', user, st, flash, active: '', body: `
-  <section class="card arena-head">${pi('achievement', 84, 'float')}<div class="grow"><small class="tut-k">Profil</small><h2>${esc(user.username)}${ttl(user.title)}</h2>
+  <section class="card arena-head">${pi('achievement', 84, 'float')}<div class="grow"><small class="tut-k">Profil</small><h2>${esc(user.username)}${pBadge(user.prestige)}${ttl(user.title)}</h2>
     <small class="muted">Osiągnięcia: <b>${got}/${A.COUNT}</b></small><div class="bar sm"><i style="width:${Math.round((got / A.COUNT) * 100)}%"></i></div></div></section>
   <section class="card"><h3 class="with-ic">${ic('crown', 'acc')} Tytuł przy nicku</h3>${tsel}</section>
   <section class="card"><h3 class="with-ic">${pi('achievement', 30)} Osiągnięcia</h3><div class="ach-grid">${cards}</div></section>` });

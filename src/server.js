@@ -29,6 +29,7 @@ import registerMarket from './features/market.js';
 import registerFleet from './features/fleet.js';
 import registerCampaign from './features/campaign.js';
 import registerGear from './features/gear.js';
+import registerPrestige from './features/prestige.js';
 import registerEvents, * as EVF from './features/events.js';
 import { POINTS as EV_POINTS } from './events.js';
 import registerReferral, { checkReferral, findInviter } from './features/referral.js';
@@ -207,7 +208,7 @@ app.get('/', page(async (req, now) => {
   const players = (await db.get('SELECT COUNT(*) AS n FROM users')).n;
   const online = (await db.get('SELECT COUNT(*) AS n FROM users WHERE collected_at > ? OR last_battle_at > ?', [now - 3600_000, now - 3600_000])).n;
   const battles24 = (await db.get('SELECT COUNT(*) AS n FROM battles WHERE created_at > ?', [now - 86400_000])).n;
-  const top = await db.all(`SELECT u.username, u.level, c.tag FROM users u LEFT JOIN corps c ON c.id = u.corp_id
+  const top = await db.all(`SELECT u.username, u.level, u.prestige, c.tag FROM users u LEFT JOIN corps c ON c.id = u.corp_id
     ORDER BY u.level DESC, u.xp DESC, u.id ASC LIMIT 5`);
   const refCode = String(req.query.ref || req.cookiesObj.ref || '').toLowerCase();
   const inviter = await findInviter(db, refCode);
@@ -359,7 +360,7 @@ for (const [path, q, back] of [['/kolonia/przyspiesz', 'bq', '/kolonia'], ['/sta
 
 // ---------- bitwy ----------
 async function battleTargets(u, now) {
-  return db.all(`SELECT u.id, u.username, u.level, u.planet, u.s_hull, u.s_guns, u.s_shields, c.tag
+  return db.all(`SELECT u.id, u.username, u.level, u.prestige, u.planet, u.s_hull, u.s_guns, u.s_shields, c.tag
     FROM users u LEFT JOIN corps c ON c.id = u.corp_id
     WHERE u.id != ? AND u.level >= ? AND u.protected_until < ? AND (u.corp_id IS NULL OR u.corp_id != ?)
     ORDER BY ABS(u.level - ?) ASC, u.id DESC LIMIT 10`, [u.id, u.level - 2, now, u.corp_id ?? -1, u.level]);
@@ -464,23 +465,28 @@ async function rankingData(tab, userId) {
     return { rows: await db.all(`SELECT c.id, c.name, c.tag, COUNT(u.id) AS members, COALESCE(SUM(u.level * 100 + u.pvp_points), 0) AS power
       FROM corps c JOIN users u ON u.corp_id = c.id GROUP BY c.id ORDER BY power DESC LIMIT 50`) };
   }
-  const order = tab === 'pvp' ? 'u.pvp_points DESC, u.pvp_wins DESC, u.id ASC' : 'u.level DESC, u.xp DESC, u.id ASC';
-  const rows = await db.all(`SELECT u.id, u.username, u.title, u.level, u.xp, u.pve_wins, u.pvp_wins, u.pvp_losses, u.pvp_points, c.tag
-    FROM users u LEFT JOIN corps c ON c.id = u.corp_id WHERE u.banned_until <= ? ORDER BY ${order} LIMIT 50`, [Date.now()]);
-  const me = await db.get('SELECT level, xp, pvp_points, pvp_wins, id FROM users WHERE id = ?', [userId]);
+  const order = tab === 'pvp' ? 'u.pvp_points DESC, u.pvp_wins DESC, u.id ASC' : tab === 'prestiz' ? 'u.prestige DESC, u.peak_level DESC, u.level DESC, u.id ASC' : 'u.level DESC, u.xp DESC, u.id ASC';
+  const rows = await db.all(`SELECT u.id, u.username, u.title, u.level, u.xp, u.pve_wins, u.pvp_wins, u.pvp_losses, u.pvp_points, u.prestige, u.peak_level, u.pp, c.tag
+    FROM users u LEFT JOIN corps c ON c.id = u.corp_id WHERE u.banned_until <= ?${tab === 'prestiz' ? ' AND u.prestige > 0' : ''} ORDER BY ${order} LIMIT 50`, [Date.now()]);
+  const me = await db.get('SELECT level, xp, pvp_points, pvp_wins, prestige, peak_level, id FROM users WHERE id = ?', [userId]);
+  if (tab === 'prestiz') {
+    const hi = await db.get('SELECT COUNT(*) AS n FROM users WHERE prestige > ? OR (prestige = ? AND (peak_level > ? OR (peak_level = ? AND (level > ? OR (level = ? AND id < ?)))))',
+      [me.prestige, me.prestige, me.peak_level, me.peak_level, me.level, me.level, me.id]);
+    return { rows, myRank: me.prestige > 0 ? Number(hi.n) + 1 : null };
+  }
   const higher = tab === 'pvp'
     ? await db.get('SELECT COUNT(*) AS n FROM users WHERE pvp_points > ? OR (pvp_points = ? AND (pvp_wins > ? OR (pvp_wins = ? AND id < ?)))', [me.pvp_points, me.pvp_points, me.pvp_wins, me.pvp_wins, me.id])
     : await db.get('SELECT COUNT(*) AS n FROM users WHERE level > ? OR (level = ? AND (xp > ? OR (xp = ? AND id < ?)))', [me.level, me.level, me.xp, me.xp, me.id]);
   return { rows, myRank: higher.n + 1 };
 }
 app.get('/ranking', auth, page(async (req, now, st) => {
-  const tab = ['gracze', 'pvp', 'korporacje'].includes(req.query.tab) ? req.query.tab : 'gracze';
+  const tab = ['gracze', 'pvp', 'prestiz', 'korporacje'].includes(req.query.tab) ? req.query.tab : 'gracze';
   const data = await rankingData(tab, req.user.id);
   return V.ranking({ user: req.user, st, flash: req.flash, tab, ...data });
 }));
 app.get('/api/ranking', auth, async (req, res, next) => {
   try {
-    const tab = ['gracze', 'pvp', 'korporacje'].includes(req.query.tab) ? req.query.tab : 'gracze';
+    const tab = ['gracze', 'pvp', 'prestiz', 'korporacje'].includes(req.query.tab) ? req.query.tab : 'gracze';
     res.json({ ok: true, tab, ...(await rankingData(tab, req.user.id)) });
   } catch (e) { next(e); }
 });
@@ -500,6 +506,7 @@ registerMarket(ctx);
 registerFleet(ctx);
 registerCampaign(ctx);
 registerGear(ctx);
+registerPrestige(ctx);
 registerEvents(ctx);
 registerReferral(ctx);
 registerAdmin(ctx);
@@ -532,7 +539,7 @@ if (process.env.DEV_HOOKS === '1' && !process.env.RENDER) {
     return { msg: 'Przewinięto czas.' };
   }));
   app.post('/api/dev/poziom', auth, action('/', async (t, u, now, req) => {
-    await t.run('UPDATE users SET level = ?, xp = 0 WHERE id = ?', [Math.max(1, Math.min(50, Number(req.body.level) || 1)), u.id]);
+    await t.run('UPDATE users SET level = ?, xp = 0 WHERE id = ?', [Math.max(1, Math.min(200, Number(req.body.level) || 1)), u.id]);
     return { msg: 'ok' };
   }));
   app.post('/api/dev/budynek', auth, action('/', async (t, u, now, req) => {

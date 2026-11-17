@@ -1,4 +1,5 @@
 import * as GE from './gear.js';
+import * as PS from './prestige.js';
 // Etap v6/1: klasy statków i drzewko technologii (czyste dane i reguły, bez zależności).
 export const CLASSES = {
   szturmowiec: { id: 'szturmowiec', name: 'Szturmowiec', icon: 'c_assault', role: 'Atak',
@@ -96,7 +97,7 @@ export const resetCost = (spent) => ({ metal: 0, crystal: Math.max(100, 100 * sp
 
 export const techList = (u) => String(u?.tech || '').split(',').filter((id) => TECH_BY_ID[id]);
 /** Punkty badawcze: 1 za każdy poziom powyżej 1 i 2 za każdy poziom laboratorium powyżej 1. */
-export const rpTotal = (u) => Math.max(0, (u.level || 1) - 1) + 2 * Math.max(0, (u.b_lab || 1) - 1);
+export const rpTotal = (u) => Math.max(0, (u.level || 1) - 1) + 2 * Math.max(0, (u.b_lab || 1) - 1) + PS.bonusRp(u);
 export const rpSpent = (u) => techList(u).reduce((a, id) => a + TIER_RP[TECH_BY_ID[id].tier], 0) + (u.rq_id && TECH_BY_ID[u.rq_id] ? TIER_RP[TECH_BY_ID[u.rq_id].tier] : 0);
 export const rpFree = (u) => rpTotal(u) - rpSpent(u);
 /** Czy węzeł można badać: poprzedni w gałęzi zbadany, sam jeszcze nie. */
@@ -118,7 +119,7 @@ const ZERO = { hp: 0, atk: 0, def: 0, crit: 0, dodge: 0, shield: 0, repair: 0, p
 const cache = new Map();
 /** Łączne modyfikatory klasy i technologii (sumowane). */
 export function mods(u) {
-  const key = `${u?.ship_class || ''}|${u?.tech || ''}|${u?.relics || ''}|${u?.gear || ''}`;
+  const key = `${u?.ship_class || ''}|${u?.tech || ''}|${u?.relics || ''}|${u?.gear || ''}|${u?.prestige || 0}|${u?.perks || ''}|${GE.slotCount(u)}`;
   let m = cache.get(key);
   if (m) return m;
   m = { ...ZERO };
@@ -127,6 +128,7 @@ export function mods(u) {
   for (const id of techList(u)) add(TECH_BY_ID[id].m);
   for (const id of relicList(u)) add(RELICS[id].m);
   for (const g of GE.gearList(u).slice(0, GE.slotCount(u))) add(GE.effect(g.def, g.rarity, g.level));
+  add(PS.prestigeMods(u));
   if (cache.size > 500) cache.clear();
   cache.set(key, m);
   return m;

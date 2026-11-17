@@ -1,5 +1,5 @@
 // Widoki sezonu: przepustka, ranking sezonowy, archiwum zwycięzców.
-import { layout, esc, fmt, rewardChips, ttl } from './views.js';
+import { layout, esc, fmt, rewardChips, ttl, pBadge } from './views.js';
 import { pi, ic, lvBadge } from './icons.js';
 import * as S from './season.js';
 import { seasonName, dur } from './time.js';
@@ -51,7 +51,7 @@ export function rankingPage({ user, st, flash, season, rows, myRank, myXp, badge
   const bmap = {};
   for (const b of badges) (bmap[b.user_id] ||= []).push(b);
   const list = rows.map((r, i) => `<div class="item rank ${r.id === user.id ? 'me' : ''}"><span class="pos">${i < 3 ? pi(['medal_gold', 'medal_silver', 'medal_bronze'][i], 30) : i + 1}</span>
-    <span class="grow"><b>${esc(r.username)}</b>${ttl(r.title)}${r.tag ? ` <span class="corp">[${esc(r.tag)}]</span>` : ''} ${(bmap[r.id] || []).slice(0, 4).map((b) => badgeIcon(b, 18)).join('')}<br><small class="muted">poziom przepustki ${S.level(r.xp)}</small></span>
+    <span class="grow"><b>${esc(r.username)}</b>${pBadge(r.prestige)}${ttl(r.title)}${r.tag ? ` <span class="corp">[${esc(r.tag)}]</span>` : ''} ${(bmap[r.id] || []).slice(0, 4).map((b) => badgeIcon(b, 18)).join('')}<br><small class="muted">poziom przepustki ${S.level(r.xp)}</small></span>
     <b class="pts">${fmt(r.xp)} XP</b></div>`).join('');
   const rw = [1, 2, 3, 4].map((k) => `<div class="rw-rank">${pi(S.BADGES[S.badgeForRank(k)].icon, 34)}<b>${k === 4 ? '4–10' : k + '.'}</b><div class="chips">${rewardChips(S.rankReward(k), 13)}</div></div>`).join('');
   return layout({ title: 'Ranking sezonu', user, st, flash, active: 'misje', body: `

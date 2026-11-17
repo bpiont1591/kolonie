@@ -726,6 +726,63 @@ check(r.status === 200, 'Manifest PWA');
   }
 }
 
+// ---------- v7 etap 4: prestiż „Odrodzenie” ----------
+{
+  const Q = new Client(`Feniks_${suffix}`);
+  await Q.post('/rejestracja', { username: Q.name, password: 'tajnehaslo1' });
+  await Q.post('/samouczek/pomin');
+  r = await Q.get('/odrodzenie', false);
+  check(r.status === 200 && r.data.includes('Tracisz') && r.data.includes('Zachowujesz') && r.data.includes('od poziomu 50'), 'Prestiż: ekran Odrodzenia – co tracisz, co zachowujesz');
+  let pv = (await Q.get('/api/odrodzenie')).data;
+  check(pv.ok && !pv.can && pv.minLevel === 50 && pv.rank === 0 && pv.loses.length && pv.keeps.length, 'Prestiż: API podglądu');
+  r = await Q.post('/odrodzenie', { confirm: 'ODRODZENIE' });
+  check(!r.data.ok && /poziomu 50/.test(r.data.msg), 'Prestiż: dostępny dopiero od 50. poziomu', r.data.msg);
+  r = await Q.get('/ranking?tab=prestiz', false);
+  check(r.status === 200 && r.data.includes('Prestiż'), 'Prestiż: zakładka rankingu prestiżu');
+  if (DEV) {
+    await Q.post('/api/dev/poziom', { level: 57 }); for (let i = 0; i < 3; i++) await Q.post('/api/dev/surowce');
+    await Q.post('/statek/klasa/krazownik');
+    await Q.post('/badania/start/b1'); await Q.post('/badania/przyspiesz');
+    await Q.post('/badania/start/p1');
+    const it = (await Q.post('/api/dev/modul', { def: 'kadlub', rarity: 3 })).data.id;
+    await Q.post(`/moduly/zaloz/${it}`);
+    await Q.post('/api/dev/kampania', { c: 1, stars: 3 });
+    const before = (await Q.get('/api/stan')).data;
+    pv = (await Q.get('/api/odrodzenie')).data;
+    check(pv.can && pv.gain === 7, 'Prestiż: na poziomie 57 – odrodzenie za 7 PP', `gain=${pv.gain}`);
+    r = await Q.post('/odrodzenie', { confirm: 'tak' });
+    check(!r.data.ok && /ODRODZENIE/.test(r.data.msg), 'Prestiż: wymaga wpisania słowa ODRODZENIE');
+    r = await Q.post('/odrodzenie', { confirm: 'odrodzenie' });
+    const after = (await Q.get('/api/stan')).data;
+    const gm = (await Q.get('/api/moduly')).data, kp = (await Q.get('/api/kampania')).data, bd = (await Q.get('/api/badania')).data;
+    check(r.data.ok && r.data.rank === 1 && r.data.gain === 7 && after.user.level === 1 && after.user.xp === 0 && after.user.prestige === 1 && after.user.pp === 7 && after.user.peak_level === 57,
+      'Prestiż: reset poziomu, ranga 1, +7 PP', r.data.msg);
+    check(after.user.tech === '' && !after.user.rq_id && after.user.s_guns === 1 && after.user.s_hull === 1 && bd.tech.length === 0, 'Prestiż: technologie i poziomy modułów statku zresetowane');
+    check(after.user.ship_class === 'krazownik' && after.user.b_mine === before.user.b_mine && after.user.b_lab === before.user.b_lab && Math.abs(after.stock.metal - before.stock.metal) < before.stock.metal * 0.05 + 500,
+      'Prestiż: klasa, budynki i surowce zachowane');
+    check(gm.slots === 3 && gm.items.some((i) => i.id === it && i.slot === 1) && /kadlub:3:1/.test(after.user.gear) && kp.chapters[0].stars === 15, 'Prestiż: moduły specjalne (3 sloty) i gwiazdki kampanii zachowane', `slots=${gm.slots} items=${JSON.stringify(gm.items.map((i) => [i.id, i.slot]))} it=${it} gear=${after.user.gear} stars=${kp.chapters[0].stars}`);
+    check(bd.mods.xp >= 0.05 && bd.mods.prod >= 0.03, 'Prestiż: stały bonus rangi (+5% XP, +3% wydobycia)');
+    r = await Q.post('/odrodzenie', { confirm: 'ODRODZENIE' });
+    check(!r.data.ok, 'Prestiż: drugie odrodzenie od razu niemożliwe (poziom 1)');
+    const atk0 = bd.mods.atk;
+    r = await Q.post('/odrodzenie/ulepsz/wojownik');
+    const r2 = await Q.post('/odrodzenie/ulepsz/wojownik');
+    const bd2 = (await Q.get('/api/badania')).data, st2 = (await Q.get('/api/stan')).data;
+    check(r.data.ok && r2.data.ok && r2.data.cost === 2 && st2.user.pp === 4 && Math.abs(bd2.mods.atk - atk0 - 0.04) < 1e-9, 'Prestiż: sklep ulepszeń (koszt rośnie, +2% ataku na poziom)');
+    r = await Q.post('/odrodzenie/ulepsz/archiwa');
+    const bd3 = (await Q.get('/api/badania')).data;
+    check(r.data.ok && bd3.rpTotal === bd2.rpTotal + 2, 'Prestiż: Archiwa Prastarych dają +2 PB', `${bd2.rpTotal} → ${bd3.rpTotal}`);
+    await Q.post('/api/dev/prestiz', { pp: 0 });
+    r = await Q.post('/odrodzenie/ulepsz/pancerz');
+    check(!r.data.ok && /PP/.test(r.data.msg), 'Prestiż: brak PP blokuje zakup');
+    const rk = (await Q.get('/api/ranking?tab=prestiz')).data;
+    check(rk.ok && rk.rows.some((x) => x.username === Q.name && x.prestige === 1) && rk.myRank >= 1, 'Prestiż: osobny ranking prestiżu', `#${rk.myRank}`);
+    r = await Q.get('/ranking?tab=prestiz', false);
+    const r3 = await Q.get('/kolonia', false);
+    check(r.data.includes('class="pbadge"') && r3.data.includes('class="pbadge"'), 'Prestiż: znak rangi przy nicku (pasek i ranking)');
+  }
+}
+
 // ---------- v6 etap 2: kampania fabularna ----------
 {
   let ca = (await E.get('/api/kampania')).data;
