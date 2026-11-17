@@ -678,10 +678,58 @@ check(r.status === 200, 'Manifest PWA');
   }
 }
 
+// ---------- v7 etap 3: kampania 6–10 i tryb trudny ----------
+{
+  const K = new Client(`Kampan_${suffix}`);
+  await K.post('/rejestracja', { username: K.name, password: 'tajnehaslo1' });
+  await K.post('/samouczek/pomin');
+  let kp = (await K.get('/api/kampania')).data;
+  check(kp.ok && kp.chapters.length === 10 && kp.chapters.map((c) => c.minLvl).join() === '1,4,8,12,16,20,26,32,40,48', 'Kampania v7: 10 rozdziałów (minLvl 20/26/32/40/48 dla nowych)');
+  check(kp.chapters.every((c) => c.hard && !c.hard.unlocked && c.hard.missions.length === 5 && c.hard.missions[0].id === `h${c.n}-1`), 'Kampania v7: tryb trudny zablokowany na start, osobne misje');
+  r = await K.post('/kampania/walcz/h1-1');
+  check(!r.data.ok && /15★/.test(r.data.msg), 'Kampania v7: tryb trudny wymaga 15★ w rozdziale', r.data.msg);
+  r = await K.post('/kampania/walcz/6-1');
+  check(!r.data.ok && /bossa rozdziału 5/.test(r.data.msg), 'Kampania v7: rozdział 6 po bossie rozdziału 5', r.data.msg);
+  r = await K.get('/kampania/10', false);
+  check(r.status === 200 && r.data.includes('Tron Pustki') && r.data.includes('pl_10.webp') && r.data.includes('cb_10.webp'), 'Kampania v7: rozdział 10 – planeta i boss z grafiką');
+  r = await K.get('/kampania/1?tryb=trudny', false);
+  check(r.status === 200 && r.data.includes('hardmode') && /Trudny – po 15★/.test(r.data), 'Kampania v7: zakładka trybu trudnego (zablokowana)');
+  if (DEV) {
+    await K.post('/api/dev/poziom', { level: 60 }); for (let i = 0; i < 3; i++) await K.post('/api/dev/surowce');
+    await K.post('/api/dev/kampania', { c: 1, stars: 3 });
+    kp = (await K.get('/api/kampania')).data;
+    check(kp.chapters[0].stars === 15 && kp.chapters[0].hard.unlocked && kp.chapters[0].hard.missions[0].open && !kp.chapters[0].hard.missions[1].open, 'Kampania v7: 15★ odblokowuje tryb trudny rozdziału');
+    check(kp.chapters[0].hard.missions[0].enemyPower > kp.chapters[0].missions[0].enemyPower * 1.6, 'Kampania v7: trudni wrogowie silniejsi (×1,6, +3 poz.)');
+    await K.post('/api/dev/przewin', { minutes: 120 });
+    const e0 = (await K.get('/api/stan')).data.stock.energy;
+    r = await K.post('/kampania/walcz/h1-1');
+    const e1 = (await K.get('/api/stan')).data.stock.energy;
+    kp = (await K.get('/api/kampania')).data;
+    check(r.data.ok && r.data.won && kp.chapters[0].hard.missions[0].stars === r.data.stars && kp.chapters[0].missions[0].stars === 3 && e0 - e1 >= 12, 'Kampania v7: walka w trybie trudnym – osobne gwiazdki, ×1,5 energii', r.data.msg);
+    r = await K.get(`/bitwa/${r.data.battleId}`, false);
+    check(r.status === 200 && r.data.includes('/kampania/1?tryb=trudny'), 'Kampania v7: raport bitwy prowadzi do mapy trybu trudnego');
+    r = await K.post('/kampania/skrzynia/1?tryb=trudny');
+    check(!r.data.ok && /15★/.test(r.data.msg), 'Kampania v7: skrzynia trybu trudnego wymaga 15★ trudnych', r.data.msg);
+    await K.post('/api/dev/kampania', { c: 1, m: 4, stars: 1, hard: 1 });
+    await K.post('/api/dev/przewin', { minutes: 120 });
+    r = await K.post('/kampania/walcz/h1-5');
+    check(r.data.ok && r.data.won && r.data.item && r.data.item.rarity >= 1 && /Moduł specjalny/.test(r.data.msg), 'Kampania v7: boss trybu trudnego – gwarantowany moduł przy pierwszym zwycięstwie', r.data.msg);
+    await K.post('/api/dev/kampania', { c: 1, stars: 3, hard: 1 });
+    r = await K.post('/kampania/skrzynia/1?tryb=trudny');
+    const kc = (await K.get('/api/kampania')).data.chapters[0];
+    check(r.data.ok && r.data.item && kc.hard.chest && !kc.chest, 'Kampania v7: skrzynia trybu trudnego (2 rdzenie + moduł), normalna osobno', r.data.msg);
+    for (let c = 1; c <= 5; c++) await K.post('/api/dev/kampania', { c, stars: 1 });
+    kp = (await K.get('/api/kampania')).data;
+    check(kp.chapters[5].unlocked && !kp.chapters[6].unlocked && kp.chapters[5].missions[0].open, 'Kampania v7: rozdział 6 odblokowany po bossie 5 (poz. 20+)');
+    r = await K.get('/kampania/6', false);
+    check(r.data.includes('Złote Grobowce') && r.data.includes('Archont Aurelii') && r.data.includes('Korona Archonta'), 'Kampania v7: fabuła i trofeum rozdziału 6');
+  }
+}
+
 // ---------- v6 etap 2: kampania fabularna ----------
 {
   let ca = (await E.get('/api/kampania')).data;
-  check(ca.ok && ca.chapters.length === 5 && ca.chapters.every((c) => c.missions.length === 5 && c.missions[4].boss), 'Kampania: 5 rozdziałów × 5 misji (boss na końcu)');
+  check(ca.ok && ca.chapters.length === 10 && ca.chapters.every((c) => c.missions.length === 5 && c.missions[4].boss), 'Kampania: 10 rozdziałów × 5 misji (boss na końcu)');
   check(ca.chapters[0].unlocked && !ca.chapters[1].unlocked && ca.chapters[0].missions[0].open && !ca.chapters[0].missions[1].open, 'Kampania: odblokowany tylko rozdział 1, misja 1');
   r = await E.post('/kampania/walcz/1-2');
   check(!r.data.ok && /poprzedni/.test(r.data.msg), 'Kampania: misja 2 wymaga ukończenia misji 1', r.data.msg);

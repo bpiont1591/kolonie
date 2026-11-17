@@ -253,10 +253,11 @@ t('Moduły specjalne: rzadkość, efekty, sloty, łupy, rozbiór', () => {
   assert.ok(sim.log.some((l) => /syfon \+\d+ HP/.test(l.t)) && sim.log.some((l) => /pryzmat odbija/.test(l.t)));
 });
 t('Kampania: dane, odblokowanie, gwiazdki, nagrody, trofea', () => {
-  assert.equal(CA.CHAPTERS.length, 5);
+  assert.equal(CA.CHAPTERS.length, 10);
+  assert.deepEqual(CA.CHAPTERS.map((c) => c.minLvl), [1, 4, 8, 12, 16, 20, 26, 32, 40, 48]);
   for (const c of CA.CHAPTERS) { assert.equal(c.missions.length, 5); assert.ok(PR.RELICS[c.boss.relic] && c.intro.length > 40); }
   assert.deepEqual(CA.parseId('3-5') && [CA.parseId('3-5').c, CA.parseId('3-5').boss], [3, true]);
-  assert.equal(CA.parseId('6-1'), null); assert.equal(CA.parseId('1-6'), null); assert.equal(CA.parseId('x'), null);
+  assert.equal(CA.parseId('11-1'), null); assert.equal(CA.parseId('1-6'), null); assert.equal(CA.parseId('x'), null);
   assert.deepEqual([CA.starsFor(false, 100, 100), CA.starsFor(true, 10, 100), CA.starsFor(true, 35, 100), CA.starsFor(true, 60, 100), CA.starsFor(true, 40, 100, true)], [0, 1, 2, 3, 3]);
   const e1 = CA.enemy(1, 1), b1 = CA.enemy(1, 5), e5 = CA.enemy(5, 1);
   assert.ok(b1.maxHp > e1.maxHp && b1.boss && e5.atk > b1.atk);
@@ -268,6 +269,21 @@ t('Kampania: dane, odblokowanie, gwiazdki, nagrody, trofea', () => {
   p = CA.progress({ level: 3, camp_chests: '1' }, { '1-1': { stars: 3, wins: 1 }, '1-5': { stars: 1, wins: 1 } });
   assert.ok(p[0].ms[1].open && !p[1].unlocked && p[1].prevBoss && p[0].chest && p[0].stars === 4); // rozdział 2 wymaga też poziomu 4
   assert.ok(CA.progress({ level: 4 }, { '1-5': { stars: 1 } })[1].unlocked);
+  // v7/3: tryb trudny – osobne gwiazdki, odblokowanie po 15★, silniejsi wrogowie i lepsze łupy
+  const hp = CA.parseId('h3-5');
+  assert.ok(hp.hard && hp.boss && hp.c === 3 && hp.id === 'h3-5' && !CA.parseId('3-5').hard);
+  const he = CA.enemy(3, 5, true), ne = CA.enemy(3, 5);
+  assert.ok(he.maxHp > ne.maxHp * 1.6 && he.atk > ne.atk * 1.6 && he.level === ne.level + 3);
+  assert.equal(CA.energyCost(3, 5, true), Math.round(CA.energyCost(3, 5) * 1.5));
+  const hr = CA.reward(3, 5, 1, true, () => 0.5, true), nr = CA.reward(3, 5, 1, true, () => 0.5);
+  assert.ok(hr.xp > nr.xp * 2 && hr.core === 1 && !hr.relic && nr.relic === 'roj');
+  const full = Object.fromEntries([1, 2, 3, 4, 5].map((m) => [`2-${m}`, { stars: 3, wins: 1 }]));
+  p = CA.progress({ level: 10, camp_chests: '2,h2' }, { ...full, '1-5': { stars: 1 }, 'h2-1': { stars: 2, wins: 1 } });
+  assert.ok(p[1].hard.unlocked && p[1].hard.ms[0].stars === 2 && p[1].hard.ms[1].open && !p[1].hard.ms[2].open && p[1].hard.stars === 2 && p[1].stars === 15 && p[1].hard.chest);
+  assert.ok(!p[0].hard.unlocked && !p[0].hard.ms[0].open);
+  assert.equal(CA.withChest({ camp_chests: '1' }, 4, true), '1,h4');
+  assert.deepEqual(CA.CHEST(2, true), { core: 2, crystal: 300, metal: 800 });
+  for (const c of CA.CHAPTERS.slice(5)) assert.ok(PR.RELICS[c.boss.relic]);
   const base = R.shipStats({ level: 5, s_hull: 2, s_guns: 2, s_shields: 2 }), rel = R.shipStats({ level: 5, s_hull: 2, s_guns: 2, s_shields: 2, relics: 'grax,kowal' });
   assert.ok(rel.maxHp > base.maxHp && rel.atk > base.atk && rel.def >= base.def);
 });

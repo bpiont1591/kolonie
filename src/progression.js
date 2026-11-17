@@ -79,6 +79,11 @@ export const RELICS = {
   roj: { id: 'roj', name: 'Feromon Roju', desc: '+10% łupów PvE i z ekspedycji', m: { pveLoot: 0.1, expLoot: 0.1 } },
   kowal: { id: 'kowal', name: 'Rdzeń kuźni', desc: '+5% ataku i obrony', m: { atk: 0.05, def: 0.05 } },
   otchlan: { id: 'otchlan', name: 'Oko Otchłani', desc: '+3% krytyka i uniku', m: { crit: 0.03, dodge: 0.03 } },
+  archont: { id: 'archont', name: 'Korona Archonta', desc: '+5% ataku, +2% krytyka', m: { atk: 0.05, crit: 0.02 } },
+  tytan: { id: 'tytan', name: 'Serce burzy', desc: '+6% HP, +5% obrony', m: { hp: 0.06, def: 0.05 } },
+  widmo: { id: 'widmo', name: 'Pieczęć Admirała', desc: '+3% uniku, +8% XP', m: { dodge: 0.03, xp: 0.08 } },
+  chronos: { id: 'chronos', name: 'Klepsydra Chronosa', desc: 'regeneracja 1% maks. HP co rundę, +20% naprawy', m: { regen: 0.01, repair: 0.2 } },
+  pustka: { id: 'pustka', name: 'Tron Pustki', desc: '+5% ataku i HP, 3% szansy na drugą salwę', m: { atk: 0.05, hp: 0.05, double: 0.03 } },
 };
 export const relicList = (u) => String(u?.relics || '').split(',').filter((id) => RELICS[id]);
 export const TECH_BY_ID = Object.fromEntries(TECH.map((n) => [n.id, n]));
