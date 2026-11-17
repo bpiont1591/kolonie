@@ -6,6 +6,7 @@ import * as G from '../game.js';
 import { fail } from '../game.js';
 import { weekStart, dur } from '../time.js';
 import * as VC from '../views-corp.js';
+import { dropItem } from './gear.js';
 
 export default function registerCorp({ app, db, auth, page, action, payable, costText, preBattle, settledHooks, devHooks }) {
   const members = (q, corpId) => q.all('SELECT id, username, title, level, xp, pvp_points, corp_role, s_hull, s_guns, s_shields FROM users WHERE corp_id = ? ORDER BY CASE corp_role WHEN \'leader\' THEN 0 WHEN \'officer\' THEN 1 ELSE 2 END, level DESC, xp DESC', [corpId]);
@@ -229,7 +230,8 @@ export default function registerCorp({ app, db, auth, page, action, payable, cos
     if (killed && hits[0].user_id === u.id) rw.core = 1; // najwięcej obrażeń -> Rdzeń kwantowy
     await t.run('UPDATE boss_hits SET claimed = 1 WHERE boss_id = ? AND user_id = ?', [b.id, u.id]);
     const got = await G.grant(t, u, now, rw);
-    return { msg: `${killed ? 'Łupy z bossa' : 'Nagroda pocieszenia'}: ${G.rewardText(got)}`, data: { reward: got, killed } };
+    const drop = killed ? await dropItem(t, u, now, hits[0].user_id === u.id ? 'raidTop' : 'raid') : null;
+    return { msg: `${killed ? 'Łupy z bossa' : 'Nagroda pocieszenia'}: ${G.rewardText(got)}${drop?.text || ''}`, data: { reward: got, killed, item: drop?.item || null } };
   }));
 
   const bossHooks = [(corpId, b, by) => fire(() => N.toCorp(corpId, by.id, {

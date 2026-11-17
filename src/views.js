@@ -4,6 +4,8 @@ import * as Q from './quests.js';
 import { dur, clockHM } from './time.js';
 import { titleOf } from './achievements.js';
 import * as P from './progression.js';
+import * as GE from './gear.js';
+import { gearIcon } from './views-gear.js';
 export { ic, pi, lvBadge };
 
 /** Polska odmiana: plural(2, 'nagroda', 'nagrody', 'nagród') -> 'nagrody'. */
@@ -419,6 +421,7 @@ export function ship({ user, st, flash, now = Date.now() }) {
     <a class="callout" href="/statek/klasa"><span class="big-glyph sm">${ic(P.CLASSES[user.ship_class]?.icon || 'ship', 'acc')}</span><span class="grow"><b>Klasa statku</b><br><small>${P.CLASSES[user.ship_class]?.name || 'nie wybrano'}</small></span></a>
     <a class="callout" href="/badania"><span class="big-glyph sm">${ic('flask', 'acc')}</span><span class="grow"><b>Badania</b><br><small>${user.rq_id ? `trwa: ${P.TECH_BY_ID[user.rq_id]?.name}` : `${P.rpFree(user)} wolnych PB`}</small></span></a>
   </div>
+  <a class="callout rare" href="/statek/moduly"><span class="big-glyph sm">${ic('gem', 'acc')}</span><span class="grow"><b>Moduły specjalne</b><br><small>${GE.slotCount(user) ? `${GE.gearList(user).length}/${GE.slotCount(user)} slotów zajętych` : `pierwszy slot od poziomu ${GE.SLOT_LVLS[0]}`} · rzadkie łupy z bossów</small></span>${ic('up', 'chev-r')}</a>
   ${expeditionCallout(user, now)}
   <section class="card"><h3 class="with-ic">${ic('ship', 'acc')} Moduły</h3><p class="muted small">Limit poziomu modułów: ${cap} (2 × poziom stoczni). Za surowce z magazynu głównego.</p>${mods}</section>` });
 }
@@ -479,7 +482,7 @@ export function battleLog({ user, st, flash, b, now }) {
     ${camp ? img(rw.boss ? `cb_${camp[0]}` : `pl_${camp[0]}`, b.enemy_name, 'enemy', 120, true) : b.kind === 'pve' && rw.tier ? img('p_' + rw.tier, b.enemy_name, 'enemy', 120, true) : pi(won ? 'trophy' : 'defeat', 120, 'big-ic')}
     <h2>${won ? 'ZWYCIĘSTWO' : 'PORAŻKA'}</h2>
     <p>${esc(b.attacker_name)} <span class="muted">vs</span> ${esc(b.kind === 'pve' ? b.enemy_name : b.defender_name)}</p>
-    ${rw.evPts && mine ? `<p class="relic-drop">${ic('event', 'acc')} +${rw.evPts} pkt dla serwera w inwazji</p>` : ''}${campLine}${mine && rewardLine ? `<p class="reward">${rewardLine}</p>` : ''}
+    ${rw.evPts && mine ? `<p class="relic-drop">${ic('event', 'acc')} +${rw.evPts} pkt dla serwera w inwazji</p>` : ''}${rw.item && mine && GE.BY_ID[rw.item.def] ? `<a class="relic-drop gdrop r${rw.item.rarity}" href="/statek/moduly">${gearIcon(rw.item.def, rw.item.rarity, 44)}<span>Moduł specjalny: <b>${GE.label(rw.item)}</b><br><small class="muted">${GE.effectText(rw.item.def, rw.item.rarity, 1)}</small></span></a>` : ''}${campLine}${mine && rewardLine ? `<p class="reward">${rewardLine}</p>` : ''}
     <p class="muted small">${ago(b.created_at, now)}</p>
   </section>
   <section class="card"><h3>Przebieg</h3><ol class="log">${log.map((l) => `<li class="${l.side}"><span class="r">R${l.r}</span>${emo(esc(l.t))}</li>`).join('')}</ol></section>

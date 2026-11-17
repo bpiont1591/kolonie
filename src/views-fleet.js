@@ -8,7 +8,7 @@ import { dur } from './time.js';
 const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
 const pct = (v) => `${v > 0 ? '+' : '−'}${Math.round(Math.abs(v) * 100)}%`;
 const MOD_LABEL = { hp: 'HP', atk: 'atak', def: 'obrona', crit: 'krytyk', dodge: 'unik', shield: 'tarcza (maks. HP)', repair: 'naprawa', prod: 'wydobycie', storage: 'magazyn', xp: 'XP', pveLoot: 'łupy PvE', pvpLoot: 'łupy PvP', expLoot: 'łupy z ekspedycji',
-  double: 'szansa na 2. salwę', opener: 'pierwsza salwa', regen: 'regeneracja/rundę', counter: 'szansa na kontrę', expSpeed: 'krótsze ekspedycje', buildSpeed: 'krótsze budowy', energySave: 'mniej energii w walce' };
+  double: 'szansa na 2. salwę', opener: 'pierwsza salwa', regen: 'regeneracja/rundę', counter: 'szansa na kontrę', expSpeed: 'krótsze ekspedycje', buildSpeed: 'krótsze budowy', energySave: 'mniej energii w walce', leech: 'leczenie z obrażeń', thorns: 'odbicie obrażeń' };
 const SPECIAL = { lastStand: 'Ostatni bastion' };
 export const modChips = (m) => Object.entries(m).filter(([, v]) => v).map(([k, v]) => SPECIAL[k] ? `<span class="mchip up">${SPECIAL[k]}</span>` : `<span class="mchip ${v > 0 ? 'up' : 'down'}">${pct(v)} ${MOD_LABEL[k] || k}</span>`).join('');
 export const classBadge = (u) => (P.CLASSES[u.ship_class] ? `<span class="cls-badge">${ic(P.CLASSES[u.ship_class].icon)}${P.CLASSES[u.ship_class].name}</span>` : '');

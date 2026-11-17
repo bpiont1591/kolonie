@@ -11,6 +11,7 @@ import * as A from '../src/achievements.js';
 import * as MK from '../src/market.js';
 import * as RF from '../src/referral.js';
 import * as AD from '../src/admin.js';
+import * as GE from '../src/gear.js';
 import * as PR from '../src/progression.js';
 import * as CA from '../src/campaign.js';
 import * as EV from '../src/events.js';
@@ -220,6 +221,36 @@ t('Drzewko v7: 10 poziomów, wymagania, kamienie milowe, osiągalność ~50+', (
   assert.ok(ct.log.some((l) => /KONTRA/.test(l.t)));
   let n1 = 0; R.simulate({ ...base }, { ...foe, atk: 5 }, () => { n1++; return 0.5; });
   assert.equal(n1, 12 * 2 * 4); // 12 rund × 2 strzały × 4 losowania – bez kamieni milowych jak w v6
+});
+t('Moduły specjalne: rzadkość, efekty, sloty, łupy, rozbiór', () => {
+  assert.equal(GE.DEFS.length, 12);
+  assert.deepEqual(GE.effect('plazma', 1, 1), { atk: 0.04 });
+  assert.deepEqual(GE.effect('plazma', 3, 1), { atk: 0.1 });
+  assert.ok(Math.abs(GE.effect('plazma', 3, 10).atk - 0.19) < 1e-9);
+  assert.equal(GE.slotCount({ level: 9 }), 0); assert.equal(GE.slotCount({ level: 25 }), 2);
+  assert.equal(GE.slotCount({ level: 3, peak_level: 41 }), 3); // po prestiżu sloty zostają
+  const u = { level: 12, gear: 'plazma:3:1,kadlub:1:1,zly:1:1' };
+  assert.equal(GE.gearList(u).length, 2);
+  assert.ok(Math.abs(PR.mods(u).atk - 0.1) < 1e-9 && PR.mods(u).hp === 0); // tylko 1 slot na poz. 12
+  // konto jak bpiont: bez modułów – modyfikatory identyczne jak przed v7
+  const bp = { ship_class: 'wsparcie', tech: 'b1,b2', relics: 'grax,lewiatan' };
+  assert.deepEqual(PR.mods({ ...bp, gear: '' }), PR.mods(bp));
+  // unikaty tylko od epickich
+  let seq = [0, 0.1, 0.99]; let i = 0;
+  const it = GE.roll('xeno', { rnd: () => seq[i++] });
+  assert.ok(it && it.rarity === 1 && GE.BY_ID[it.def].minR === 1);
+  for (let k = 0; k < 500; k++) { const x = GE.roll('raidTop'); assert.ok(x && x.rarity >= GE.BY_ID[x.def].minR); }
+  assert.equal(GE.roll('xeno', { rnd: () => 0.5 }), null);
+  assert.ok(GE.roll('boss', { first: true, rnd: () => 0.5 }));
+  let leg = 0; for (let k = 0; k < 4000; k++) if (GE.roll('invasion').rarity === 3) leg++;
+  assert.ok(leg > 200 && leg < 450, `legendarne: ${leg}`);
+  const s1 = GE.salvage(2, 1), s5 = GE.salvage(2, 5);
+  assert.ok(s5.metal > s1.metal && GE.upgradeCost(3, 9).metal > GE.upgradeCost(1, 9).metal);
+  assert.equal(GE.label({ def: 'syfon', rarity: 3, level: 4 }), 'Legendarny Syfon próżni +3');
+  // efekty unikatów w walce
+  const a = { name: 'A', maxHp: 200, hp: 100, atk: 40, def: 0, leech: 0.5 }, d = { name: 'B', maxHp: 400, hp: 400, atk: 10, def: 0, thorns: 0.5 };
+  const sim = R.simulate(a, d, () => 0.5);
+  assert.ok(sim.log.some((l) => /syfon \+\d+ HP/.test(l.t)) && sim.log.some((l) => /pryzmat odbija/.test(l.t)));
 });
 t('Kampania: dane, odblokowanie, gwiazdki, nagrody, trofea', () => {
   assert.equal(CA.CHAPTERS.length, 5);

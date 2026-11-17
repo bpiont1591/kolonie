@@ -6,6 +6,7 @@ import * as G from '../game.js';
 import { fail } from '../game.js';
 import { N, fire } from '../notify.js';
 import * as VE from '../views-events.js';
+import { dropItem } from './gear.js';
 
 const ENSURE_EVERY_MS = 20_000;
 let lastEnsure = 0;
@@ -128,11 +129,12 @@ export default function registerEvents({ app, db, auth, page, action, preBattle,
       [me.cost, Math.max(1, sim.aHp), now, now, sim.aWon ? 1 : 0, u.id]);
     const got = await G.grant(t, { ...u, energy: u.energy - me.cost }, now, reward);
     const pts = sim.aWon ? await contribute(t, u, now, EV.POINTS.xeno) : 0;
+    const drop = sim.aWon ? await dropItem(t, u, now, 'xeno') : null;
     const battleId = await t.insert(`INSERT INTO battles (created_at, kind, attacker_id, defender_id, enemy_name, attacker_won, log, reward)
-      VALUES (?, 'pve', ?, NULL, ?, ?, ?, ?)`, [now, u.id, tier.name, sim.aWon ? 1 : 0, JSON.stringify(sim.log), JSON.stringify({ ...got, tier: 'xeno', evPts: pts })]);
+      VALUES (?, 'pve', ?, NULL, ?, ?, ?, ?)`, [now, u.id, tier.name, sim.aWon ? 1 : 0, JSON.stringify(sim.log), JSON.stringify({ ...got, tier: 'xeno', evPts: pts, item: drop?.item || null })]);
     await G.track(t, u.id, now, { pve: 1, win: sim.aWon ? 1 : 0, energy: me.cost });
-    return { msg: sim.aWon ? `Najeźdźca zniszczony! +${pts} pkt inwazji · ${G.rewardText(got)}` : 'Najeźdźca okazał się silniejszy – napraw statek i wracaj do walki.',
-      redirect: `/bitwa/${battleId}`, data: { battleId, won: sim.aWon, points: pts, reward: got } };
+    return { msg: sim.aWon ? `Najeźdźca zniszczony! +${pts} pkt inwazji · ${G.rewardText(got)}${drop?.text || ''}` : 'Najeźdźca okazał się silniejszy – napraw statek i wracaj do walki.',
+      redirect: `/bitwa/${battleId}`, data: { battleId, won: sim.aWon, points: pts, reward: got, item: drop?.item || null } };
   }));
 
   app.post('/wydarzenia/odbierz/:id', auth, action('/wydarzenia', async (t, u, now, req) => {
@@ -144,6 +146,7 @@ export default function registerEvents({ app, db, auth, page, action, preBattle,
     const r = await t.run('UPDATE event_points SET claimed = 1 WHERE event_id = ? AND user_id = ? AND claimed = 0', [e.id, u.id]);
     if (!r.changes) fail('Nagroda już odebrana.');
     const got = await G.grant(t, u, now, rw);
-    return { msg: `${e.success ? 'Nagroda za obronę sektora' : 'Nagroda pocieszenia'}: ${G.rewardText(got)}`, data: { reward: got } };
+    const drop = e.success ? await dropItem(t, u, now, 'invasion') : null;
+    return { msg: `${e.success ? 'Nagroda za obronę sektora' : 'Nagroda pocieszenia'}: ${G.rewardText(got)}${drop?.text || ''}`, data: { reward: got, item: drop?.item || null } };
   }));
 }

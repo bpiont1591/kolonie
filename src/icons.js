@@ -1,5 +1,5 @@
 // Zestaw ikon UI: ręcznie rysowane glify SVG (spójny styl liniowy, gradient teal) + rastrowe ikony premium (WebP).
-export const V = 22; // wersja zasobów statycznych (cache-busting)
+export const V = 24; // wersja zasobów statycznych (cache-busting)
 const P = {
   colony: '<path d="M2.5 20.5h19"/><path d="M3.5 20.5a5.75 5.75 0 0 1 11.5 0"/><path d="M9.25 14.75v5.75M5.2 17.4h8.1"/><path d="M16.75 20.5V9.5h3.5v11"/><path d="M18.5 9.5V5"/><circle cx="18.5" cy="4" r=".9" class="f"/><path d="M16.75 13h3.5M16.75 16.5h3.5"/>',
   ship: '<path d="M13.5 4.5c3-1.4 7-1.5 7-1.5s-.1 4-1.5 7L12 17l-5-5z"/><path d="M7 12l-3.5.8 2.2 2.2M12 17l-.8 3.5-2.2-2.2"/><path d="M6.2 17.8 3.5 20.5"/><circle cx="15.5" cy="8.5" r="1.6" class="f"/>',
@@ -33,6 +33,8 @@ const P = {
   c_support: '<circle cx="12" cy="12" r="8.8"/><path d="M12 7.5v9M7.5 12h9"/><circle cx="12" cy="3.2" r="1" class="f"/><circle cx="20.8" cy="12" r="1" class="f"/><circle cx="3.2" cy="12" r="1" class="f"/>',
   flask: '<path d="M9.5 3h5M10.2 3v6L4.8 18.6A1.7 1.7 0 0 0 6.3 21h11.4a1.7 1.7 0 0 0 1.5-2.4L13.8 9V3"/><path d="M7 15h10"/><circle cx="10.5" cy="17.8" r=".9" class="f"/><circle cx="13.8" cy="18.4" r=".7" class="f"/>',
   star: '<path d="M12 3.2l2.6 5.5 6 .7-4.5 4.1 1.2 5.9L12 16.5l-5.3 2.9 1.2-5.9-4.5-4.1 6-.7z"/>',
+  gem: '<path d="M7 4h10l4 5-9 11L3 9z"/><path d="M3 9h18M9.5 4L8 9l4 11M14.5 4L16 9l-4 11"/>',
+  prestige: '<path d="M12 2.5l2.2 4.6 5 .6-3.7 3.4 1 5-4.5-2.5-4.5 2.5 1-5L4.8 7.7l5-.6z" class="f"/><path d="M5 21h14M7 18.5h10"/>',
   starf: '<path d="M12 3.2l2.6 5.5 6 .7-4.5 4.1 1.2 5.9L12 16.5l-5.3 2.9 1.2-5.9-4.5-4.1 6-.7z" class="f"/>',
   planet: '<circle cx="12" cy="12" r="6"/><path d="M4.2 15.6C1.9 17.6 1.6 19.4 3 20c1.9.8 6.3-.9 10.6-4.1 4.4-3.2 7.3-6.9 6.9-8.9-.3-1.4-2.1-1.6-4.6-.6"/>',
   event: '<rect x="3.5" y="5" width="17" height="15.5" rx="2.2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/><path d="M12 11.8l1.2 2.4 2.6.4-1.9 1.8.5 2.6-2.4-1.3-2.4 1.3.5-2.6-1.9-1.8 2.6-.4z"/>',

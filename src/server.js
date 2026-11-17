@@ -28,6 +28,7 @@ import registerAdmin, { addFlag, flagIfLinked, activeAnnouncements, stats as adS
 import registerMarket from './features/market.js';
 import registerFleet from './features/fleet.js';
 import registerCampaign from './features/campaign.js';
+import registerGear from './features/gear.js';
 import registerEvents, * as EVF from './features/events.js';
 import { POINTS as EV_POINTS } from './events.js';
 import registerReferral, { checkReferral, findInviter } from './features/referral.js';
@@ -498,6 +499,7 @@ registerAchievements(ctx);
 registerMarket(ctx);
 registerFleet(ctx);
 registerCampaign(ctx);
+registerGear(ctx);
 registerEvents(ctx);
 registerReferral(ctx);
 registerAdmin(ctx);

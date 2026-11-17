@@ -51,6 +51,14 @@ for n in ['p_zwiadowca', 'p_korsarz', 'p_krazownik', 'p_dreadnought', 'p_xeno']:
 for n in ['r_metal', 'r_crystal', 'r_energy']:
     im = Image.open(f'{GEN}/{n}.jpg').crop((112, 112, 912, 912))
     webp(circle_fade(im, 0.55, 1.0), n, 128, 80)
+# v7: sprite modułów specjalnych (4×3 komórki po 128 px, miękkie okrągłe krawędzie)
+sheet = Image.open(f'{GEN}/gear_sheet.jpg').convert('RGB'); cw, chh = sheet.width // 4, sheet.height // 3
+sprite = Image.new('RGBA', (4 * 128, 3 * 128), (0, 0, 0, 0))
+for i in range(12):
+    cx, cy = i % 4, i // 4
+    cell = sheet.crop((cx * cw, cy * chh, (cx + 1) * cw, (cy + 1) * chh)).resize((128, 128), Image.LANCZOS)
+    sprite.paste(circle_fade(cell, 0.7, 1.0), (cx * 128, cy * 128))
+sprite.save(f'{OUT}/gear.webp', 'WEBP', quality=80, method=6)
 bb = Image.open(f'{GEN}/battle_bg.jpg'); bb = bb.crop((0, 80, bb.width, 652))
 webp(bb, 'battle_bg', 1100, 66)
 

@@ -92,7 +92,7 @@ export function shipStats(u) {
   return {
     maxHp: Math.round(b.maxHp * (1 + m.hp)), atk: Math.round(b.atk * (1 + m.atk)), def: Math.round(b.def * (1 + m.def)),
     crit: m.crit, dodge: m.dodge, shield: m.shield,
-    double: m.double, opener: m.opener, regen: m.regen, lastStand: m.lastStand, counter: m.counter,
+    double: m.double, opener: m.opener, regen: m.regen, lastStand: m.lastStand, counter: m.counter, leech: m.leech, thorns: m.thorns,
   };
 }
 export function repairPerMin(u) {
@@ -163,7 +163,14 @@ export function simulate(a, d, rnd = Math.random) {
     t.sh -= absorbed;
     t.hp = Math.max(0, t.hp - (dmg - absorbed));
     let saved = '';
-    if (t.hp <= 0 && t.lastStand && !t.stood) { t.stood = true; t.hp = 1; saved = ' – OSTATNI BASTION utrzymuje statek przy życiu!'; }
+    // moduły specjalne: syfon (leczenie z zadanych obrażeń) i pryzmat (odbicie części obrażeń)
+    if (s.leech && s.hp > 0 && dmg - absorbed > 0) { const h = Math.min(s.maxHp - s.hp, Math.round((dmg - absorbed) * s.leech)); if (h > 0) { s.hp += h; saved += ` · syfon +${h} HP`; } }
+    if (t.thorns && dmg - absorbed > 0 && s.hp > 0) {
+      const r = Math.max(1, Math.round((dmg - absorbed) * t.thorns));
+      s.hp = Math.max(0, s.hp - r); saved += ` · pryzmat odbija ${r}`;
+      if (s.hp <= 0 && s.lastStand && !s.stood) { s.stood = true; s.hp = 1; }
+    }
+    if (t.hp <= 0 && t.lastStand && !t.stood) { t.stood = true; t.hp = 1; saved += ' – OSTATNI BASTION utrzymuje statek przy życiu!'; }
     log.push({ r: round, side: side(s), t: `${s.name} ${pick(HIT)}${extra}: −${dmg} HP${crit ? ' (KRYTYK!)' : ''}${absorbed ? ` (tarcza pochłania ${absorbed})` : ''}. ${t.name}: ${t.hp}/${t.maxHp}${saved}` });
   };
   const turn = (s, t, round) => {
@@ -180,7 +187,7 @@ export function simulate(a, d, rnd = Math.random) {
   while (round < 12 && A.hp > 0 && D.hp > 0) {
     round++;
     turn(A, D, round);
-    if (D.hp > 0) turn(D, A, round);
+    if (D.hp > 0 && A.hp > 0) turn(D, A, round);
     regen(A, round); regen(D, round);
   }
   let aWon;

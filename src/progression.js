@@ -1,3 +1,4 @@
+import * as GE from './gear.js';
 // Etap v6/1: klasy statków i drzewko technologii (czyste dane i reguły, bez zależności).
 export const CLASSES = {
   szturmowiec: { id: 'szturmowiec', name: 'Szturmowiec', icon: 'c_assault', role: 'Atak',
@@ -108,11 +109,11 @@ export function canResearch(u, n) {
 }
 
 const ZERO = { hp: 0, atk: 0, def: 0, crit: 0, dodge: 0, shield: 0, repair: 0, prod: 0, storage: 0, xp: 0, pveLoot: 0, pvpLoot: 0, expLoot: 0,
-  double: 0, opener: 0, regen: 0, lastStand: 0, counter: 0, expSpeed: 0, buildSpeed: 0, energySave: 0 };
+  double: 0, opener: 0, regen: 0, lastStand: 0, counter: 0, expSpeed: 0, buildSpeed: 0, energySave: 0, leech: 0, thorns: 0 };
 const cache = new Map();
 /** Łączne modyfikatory klasy i technologii (sumowane). */
 export function mods(u) {
-  const key = `${u?.ship_class || ''}|${u?.tech || ''}|${u?.relics || ''}`;
+  const key = `${u?.ship_class || ''}|${u?.tech || ''}|${u?.relics || ''}|${u?.gear || ''}`;
   let m = cache.get(key);
   if (m) return m;
   m = { ...ZERO };
@@ -120,6 +121,7 @@ export function mods(u) {
   if (CLASSES[u?.ship_class]) add(CLASSES[u.ship_class].m);
   for (const id of techList(u)) add(TECH_BY_ID[id].m);
   for (const id of relicList(u)) add(RELICS[id].m);
+  for (const g of GE.gearList(u).slice(0, GE.slotCount(u))) add(GE.effect(g.def, g.rarity, g.level));
   if (cache.size > 500) cache.clear();
   cache.set(key, m);
   return m;

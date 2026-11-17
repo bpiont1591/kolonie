@@ -7,6 +7,7 @@ import * as C from '../corp.js';
 import { fail } from '../game.js';
 import * as VC from '../views-campaign.js';
 import * as EVF from './events.js';
+import { dropItem } from './gear.js';
 import { POINTS as EV_POINTS } from '../events.js';
 
 export async function campaignMap(db, userId) {
@@ -57,15 +58,17 @@ export default function registerCampaign({ app, db, auth, page, action, preBattl
         ON CONFLICT (user_id, mission) DO UPDATE SET stars = CASE WHEN campaign.stars > excluded.stars THEN campaign.stars ELSE excluded.stars END,
         wins = campaign.wins + excluded.wins, updated_at = excluded.updated_at`, [u.id, mi.id, stars, sim.aWon ? 1 : 0, now]);
     }
-    const info = { ...got, camp: mi.id, stars, best: Math.max(stars, ms.stars), first, relic, boss: mi.boss };
+    const drop = sim.aWon && mi.boss ? await dropItem(t, u, now, 'boss', { first }) : null;
+    const info = { ...got, camp: mi.id, stars, best: Math.max(stars, ms.stars), first, relic, boss: mi.boss, item: drop?.item || null };
     const battleId = await t.insert(`INSERT INTO battles (created_at, kind, attacker_id, defender_id, enemy_name, attacker_won, log, reward)
       VALUES (?, 'pve', ?, NULL, ?, ?, ?, ?)`, [now, u.id, `${ch.planet} ${mi.c}-${mi.m}: ${mi.boss ? ch.boss.name : mi.name}`, sim.aWon ? 1 : 0, JSON.stringify(sim.log), JSON.stringify(info)]);
     await G.track(t, u.id, now, { pve: 1, win: sim.aWon ? 1 : 0, energy: cost });
     if (sim.aWon) await G.warPoints(t, u, now, C.WAR_POINTS.pve);
     if (sim.aWon) await EVF.contribute(t, u, now, mi.boss ? EV_POINTS.boss : EV_POINTS.campaign);
     const relicTxt = relic ? ` Unikalny łup: ${P.RELICS[relic].name} (${P.RELICS[relic].desc})!` : '';
-    return { msg: sim.aWon ? `Misja ${mi.c}-${mi.m} zaliczona: ${'★'.repeat(stars)}${'☆'.repeat(3 - stars)} ${G.rewardText(got)}${relicTxt}` : `Misja ${mi.c}-${mi.m} nieudana – wzmocnij statek i spróbuj ponownie.`,
-      redirect: `/bitwa/${battleId}`, data: { battleId, won: sim.aWon, stars, first, relic, reward: got } };
+    const dropTxt = drop?.text || '';
+    return { msg: sim.aWon ? `Misja ${mi.c}-${mi.m} zaliczona: ${'★'.repeat(stars)}${'☆'.repeat(3 - stars)} ${G.rewardText(got)}${relicTxt}${dropTxt}` : `Misja ${mi.c}-${mi.m} nieudana – wzmocnij statek i spróbuj ponownie.`,
+      redirect: `/bitwa/${battleId}`, data: { battleId, won: sim.aWon, stars, first, relic, reward: got, item: drop?.item || null } };
   }));
 
   app.post('/kampania/skrzynia/:c', auth, action('/kampania', async (t, u, now, req) => {

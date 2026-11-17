@@ -364,6 +364,21 @@ export const MIGRATIONS = [
     )`,
     'ALTER TABLE expeditions ADD COLUMN bonus INTEGER NOT NULL DEFAULT 0',
   ]],
+  ['014_gear', [
+    `CREATE TABLE IF NOT EXISTS items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      def TEXT NOT NULL,
+      rarity INTEGER NOT NULL DEFAULT 1,
+      level INTEGER NOT NULL DEFAULT 1,
+      slot INTEGER NOT NULL DEFAULT 0,
+      source TEXT NOT NULL DEFAULT '',
+      created_at INTEGER NOT NULL
+    )`,
+    'CREATE INDEX IF NOT EXISTS items_user ON items(user_id, slot)',
+    "ALTER TABLE users ADD COLUMN gear TEXT NOT NULL DEFAULT ''",
+    'ALTER TABLE users ADD COLUMN peak_level INTEGER NOT NULL DEFAULT 0',
+  ]],
 ];
 
 async function migrate(api, conv = (s) => s) {

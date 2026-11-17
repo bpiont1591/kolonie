@@ -629,6 +629,55 @@ check(r.status === 200, 'Manifest PWA');
   }
 }
 
+// ---------- v7 etap 2: moduły specjalne ----------
+{
+  r = await E.get('/statek/moduly', false);
+  check(r.status === 200 && r.data.includes('Moduły specjalne') && r.data.includes('Skąd brać moduły'), 'Moduły specjalne: strona ładowni i slotów');
+  let gm = (await E.get('/api/moduly')).data;
+  check(gm.ok && Array.isArray(gm.items) && gm.slotLevels.join() === '10,25,40', 'Moduły specjalne: API (sloty od poz. 10/25/40)');
+  if (DEV) {
+    await E.post('/api/dev/poziom', { level: 30 }); await E.post('/api/dev/surowce'); await E.post('/api/dev/surowce');
+    const a = (await E.post('/api/dev/modul', { def: 'plazma', rarity: 3 })).data.id;
+    const b = (await E.post('/api/dev/modul', { def: 'kadlub', rarity: 2 })).data.id;
+    const c = (await E.post('/api/dev/modul', { def: 'plazma', rarity: 1 })).data.id;
+    const d = (await E.post('/api/dev/modul', { def: 'syfon', rarity: 2 })).data.id;
+    gm = (await E.get('/api/moduly')).data;
+    check(gm.slots === 2 && gm.items.length >= 4, 'Moduły specjalne: 2 sloty na poziomie 30');
+    const atk0 = (await E.get('/api/badania')).data.mods.atk;
+    r = await E.post(`/moduly/zaloz/${a}`);
+    const atk1 = (await E.get('/api/badania')).data.mods.atk;
+    check(r.data.ok && Math.abs(atk1 - atk0 - 0.1) < 1e-6, 'Moduły specjalne: legendarny Rdzeń plazmowy daje +10% ataku', `${atk0} → ${atk1}`);
+    r = await E.post(`/moduly/zaloz/${c}`);
+    check(!r.data.ok && /nie sumują/.test(r.data.msg), 'Moduły specjalne: dwa takie same moduły się nie sumują', r.data.msg);
+    r = await E.post(`/moduly/zaloz/${b}`);
+    check(r.data.ok && r.data.slot === 2, 'Moduły specjalne: drugi slot');
+    r = await E.post(`/moduly/zaloz/${d}`);
+    check(!r.data.ok && /zajęte/.test(r.data.msg), 'Moduły specjalne: pełne sloty wymagają wyboru slotu');
+    r = await E.post(`/moduly/zaloz/${d}`, { slot: 3 });
+    check(!r.data.ok && /zablokowany/.test(r.data.msg), 'Moduły specjalne: slot 3 zablokowany do poz. 40', r.data.msg);
+    r = await E.post(`/moduly/zaloz/${d}`, { slot: 2 });
+    gm = (await E.get('/api/moduly')).data;
+    check(r.data.ok && gm.items.find((i) => i.id === d).slot === 2 && gm.items.find((i) => i.id === b).slot === 0 && /syfon:2:1/.test(gm.gear), 'Moduły specjalne: podmiana w slocie (unikat Syfon próżni)');
+    const st0 = (await E.get('/api/stan')).data;
+    r = await E.post(`/moduly/ulepsz/${a}`);
+    const st1 = (await E.get('/api/stan')).data;
+    gm = (await E.get('/api/moduly')).data;
+    check(r.data.ok && r.data.level === 2 && /plazma:3:2/.test(gm.gear) && st0.stock.metal - st1.stock.metal >= r.data.cost.metal - 500, 'Moduły specjalne: ulepszenie za surowce', r.data.msg);
+    r = await E.post(`/moduly/rozbierz/${a}`);
+    check(!r.data.ok && /zdejmij/.test(r.data.msg), 'Moduły specjalne: nie można rozebrać zamontowanego');
+    await E.post(`/moduly/zdejmij/${a}`);
+    const n0 = gm.items.length;
+    r = await E.post(`/moduly/rozbierz/${a}`);
+    gm = (await E.get('/api/moduly')).data;
+    check(r.data.ok && r.data.salvage.metal > 4000 && gm.items.length === n0 - 1 && !/plazma/.test(gm.gear), 'Moduły specjalne: rozbiór na surowce (z odzyskiem ulepszeń)', r.data.msg);
+    r = await E.post('/api/dev/los', { src: 'boss' });
+    check(r.data.ok && r.data.item?.def, 'Moduły specjalne: łup z bossa (gwarantowany przy pierwszym zwycięstwie)', r.data.msg);
+    r = await E.post('/moduly/zaloz/999999');
+    check(!r.data.ok, 'Moduły specjalne: cudzy/nieistniejący moduł odrzucony');
+    for (const it of (await E.get('/api/moduly')).data.items) { if (it.slot) await E.post(`/moduly/zdejmij/${it.id}`); await E.post(`/moduly/rozbierz/${it.id}`); }
+  }
+}
+
 // ---------- v6 etap 2: kampania fabularna ----------
 {
   let ca = (await E.get('/api/kampania')).data;
