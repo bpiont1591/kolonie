@@ -16,6 +16,7 @@ import * as PS from '../src/prestige.js';
 import * as PR from '../src/progression.js';
 import * as CA from '../src/campaign.js';
 import * as EV from '../src/events.js';
+import * as NB from '../src/newbie.js';
 let n = 0;
 const t = (name, fn) => { fn(); n++; console.log(`✅ ${name}`); };
 
@@ -32,9 +33,28 @@ t('Kalendarz logowań: seria, reset po przerwie, cykl 7 dni', () => {
   assert.deepEqual([Q.loginState({ login_day: 0, login_streak: 0 }, now).next, Q.loginState({ login_day: d - 1, login_streak: 3 }, now).next], [1, 4]);
   assert.equal(Q.loginState({ login_day: d - 2, login_streak: 5 }, now).next, 1);
   assert.equal(Q.loginState({ login_day: d - 2, login_streak: 5 }, now).broken, true);
-  assert.equal(Q.loginState({ login_day: d - 1, login_streak: 7 }, now).next, 1);
+  // v9/1: kalendarz 30 dni – po dniu 7 seria trwa dalej (8), po 30 nowy cykl; ratunek po 1 opuszczonym dniu
+  assert.equal(Q.loginState({ login_day: d - 1, login_streak: 7 }, now).next, 8);
+  assert.equal(Q.loginState({ login_day: d - 1, login_streak: 30 }, now).next, 1);
+  assert.equal(Q.loginState({ login_day: d - 1, login_streak: 30 }, now).streak, 30);
+  assert.equal(Q.loginState({ login_day: d, login_streak: 37 }, now).doneUpTo, 7);
+  const rs = Q.loginState({ login_day: d - 2, login_streak: 12, level: 5 }, now).rescue;
+  assert.deepEqual([rs.ok, rs.lost, rs.cost], [true, 12, Q.rescueCost(5)]);
+  assert.equal(Q.loginState({ login_day: d - 3, login_streak: 12 }, now).rescue, null);
+  assert.equal(Q.loginState({ login_day: d - 2, login_streak: 12, streak_rescue_day: d - 3 }, now).rescue.ok, false);
+  assert.equal(Q.LOGIN_REWARDS.length, 30);
+  for (const m of Q.MILESTONES) assert.ok(Q.LOGIN_REWARDS[m - 1].core >= 1, `kamień ${m}`);
+  assert.ok(Q.LOGIN_REWARDS[12].metal > Q.LOGIN_REWARDS[5].metal, 'nagrody rosną z serią');
   assert.equal(Q.loginState({ login_day: d, login_streak: 2 }, now).claimedToday, true);
   assert.ok(Q.LOGIN_REWARDS[6].core && Q.LOGIN_REWARDS[6].metal > Q.LOGIN_REWARDS[0].metal);
+});
+t('Tarcza nowicjusza: 3 dni lub do poziomu 8', () => {
+  const now = 1_000_000;
+  assert.equal(NB.shielded({ newbie_until: now + 1, level: 7 }, now), true);
+  assert.equal(NB.shielded({ newbie_until: now + 1, level: 8 }, now), false);
+  assert.equal(NB.shielded({ newbie_until: now - 1, level: 1 }, now), false);
+  assert.equal(NB.shielded({ newbie_until: 0, level: 1 }, now), false);
+  assert.equal(NB.MS, 3 * 86400_000);
 });
 t('Misje dnia: deterministyczne, 4 różne', () => {
   const now = Date.now(), a = Q.dailyQuests(now).map((q) => q.id);

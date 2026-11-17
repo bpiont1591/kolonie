@@ -1,8 +1,10 @@
 // Nagrody za logowanie, misje dzienne i tygodniowe – czyste reguły (bez bazy).
 import { dayNum } from './time.js';
 
-/** Kalendarz 7 dni – nagrody bazowe (skalowane poziomem gracza). Dzień 7: Rdzeń kwantowy. */
-export const LOGIN_REWARDS = [
+/** v9/1: kalendarz 30 dni. Dni 1–7 jak dotąd; dalej nagrody rosną z serią. Kamienie milowe: 7, 14, 30. */
+export const LOGIN_DAYS = 30;
+export const MILESTONES = [7, 14, 30];
+const BASE7 = [
   { metal: 200 },
   { crystal: 120 },
   { energy: 150 },
@@ -11,6 +13,24 @@ export const LOGIN_REWARDS = [
   { metal: 600, energy: 300, xp: 40 },
   { metal: 1000, crystal: 600, energy: 500, xp: 100, core: 1 },
 ];
+const SPECIAL = {
+  14: { metal: 2200, crystal: 1300, energy: 1000, xp: 220, core: 1 },
+  21: { metal: 2600, crystal: 1500, energy: 1200, xp: 260 },
+  28: { metal: 3000, crystal: 1700, energy: 1400, xp: 300 },
+  30: { metal: 4500, crystal: 2800, energy: 2000, xp: 500, core: 2 },
+};
+/** Nagroda bazowa za dzień `d` serii (1–30, przed skalowaniem poziomem). Rośnie o 8% za każdy dzień serii. */
+export function loginReward(d) {
+  if (d <= 7) return { ...BASE7[d - 1] };
+  if (SPECIAL[d]) return { ...SPECIAL[d] };
+  const g = 1 + 0.08 * (d - 1), out = {};
+  for (const [k, v] of Object.entries(BASE7[(d - 1) % 7])) out[k] = k === 'core' ? v : Math.round(v * g / 10) * 10;
+  return out;
+}
+export const LOGIN_REWARDS = Array.from({ length: LOGIN_DAYS }, (_, i) => loginReward(i + 1));
+/** Ratunek serii: po opuszczeniu dokładnie 1 dnia, za kryształy, nie częściej niż raz na 7 dni. */
+export const RESCUE_COOLDOWN_DAYS = 7;
+export const rescueCost = (level) => 100 + 20 * Math.max(1, level);
 export const CORE = { name: 'Rdzeń kwantowy', hours: 24, bonus: 0.5, desc: '+50% wydobycia przez 24 h' };
 
 // ev: nazwa zdarzenia śledzonego po stronie serwera
@@ -58,14 +78,23 @@ export function dailyQuests(now) {
   return pool.slice(0, DAILY_COUNT);
 }
 
-/** Stan kalendarza logowań. */
+/** Stan kalendarza logowań. login_streak = liczba kolejnych dni z odebraną nagrodą (dawniej 1–7 – wartość zachowana). */
 export function loginState(u, now) {
   const today = dayNum(now);
   const claimedToday = u.login_day === today;
   const continuing = u.login_day === today - 1;
-  const next = claimedToday ? (u.login_streak % 7) + 1 : continuing ? (u.login_streak % 7) + 1 : 1;
-  const broken = !claimedToday && !continuing && u.login_day > 0;
-  // dni oznaczone jako odebrane w bieżącym cyklu
-  const doneUpTo = claimedToday ? u.login_streak : continuing ? u.login_streak % 7 : 0;
-  return { today, claimedToday, next, broken, doneUpTo, streak: claimedToday || continuing ? u.login_streak : 0 };
+  const live = claimedToday || continuing;
+  const streak = live ? u.login_streak : 0;
+  // dzień kalendarza (1–30), który odbierzesz następnym razem
+  const next = claimedToday ? ((u.login_streak - 1) % LOGIN_DAYS) + 1 : (streak % LOGIN_DAYS) + 1;
+  const broken = !live && u.login_day > 0;
+  // dni odebrane w bieżącym cyklu 30 dni
+  const doneUpTo = claimedToday ? ((u.login_streak - 1) % LOGIN_DAYS) + 1 : continuing ? u.login_streak % LOGIN_DAYS : 0;
+  // ratunek: opuszczony dokładnie jeden dzień, seria > 0, limit raz na 7 dni
+  const missedOne = !live && u.login_day === today - 2 && u.login_streak > 0;
+  const rescueReady = Number(u.streak_rescue_day || 0) + RESCUE_COOLDOWN_DAYS <= today;
+  const nextMilestone = MILESTONES.find((m) => m > (claimedToday ? doneUpTo : next - 1)) || null;
+  return { today, claimedToday, next, broken, doneUpTo, streak, best: Math.max(Number(u.streak_best || 0), streak),
+    rescue: missedOne ? { ok: rescueReady, cost: rescueCost(u.level), lost: u.login_streak, cooldownDays: rescueReady ? 0 : Number(u.streak_rescue_day) + RESCUE_COOLDOWN_DAYS - today } : null,
+    nextMilestone };
 }

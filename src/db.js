@@ -386,6 +386,13 @@ export const MIGRATIONS = [
     'ALTER TABLE users ADD COLUMN prestige_at INTEGER NOT NULL DEFAULT 0',
     'CREATE INDEX IF NOT EXISTS users_prestige ON users(prestige, peak_level)',
   ]],
+  // v9/1: tarcza nowicjusza (tylko nowe rejestracje – istniejący gracze dostają 0) i seria logowań 30 dni
+  ['016_newbie_streak', [
+    'ALTER TABLE users ADD COLUMN newbie_until INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE users ADD COLUMN streak_best INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE users ADD COLUMN streak_rescue_day INTEGER NOT NULL DEFAULT 0',
+    'UPDATE users SET streak_best = login_streak',
+  ]],
 ];
 
 async function migrate(api, conv = (s) => s) {

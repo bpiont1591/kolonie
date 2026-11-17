@@ -4,7 +4,8 @@ const BASE = process.env.BASE || `http://localhost:${process.env.PORT || 3100}`;
 // Token admina (z env lub z pliku .env.admin – nigdy nie wypisywany): konta testowe są oznaczane i sprzątane po teście.
 import fs from 'node:fs';
 const TOKEN = process.env.ADMIN_TOKEN || (() => { try { return /^ADMIN_TOKEN=(.+)$/m.exec(fs.readFileSync(new URL('../.env.admin', import.meta.url), 'utf8'))[1].trim(); } catch { return ''; } })();
-const T_HDR = TOKEN ? { 'x-kolonie-test': TOKEN } : {};
+// x-test-no-shield: konta testowe bez tarczy nowicjusza (v9) – poza testem samej tarczy
+const T_HDR = TOKEN ? { 'x-kolonie-test': TOKEN, 'x-test-no-shield': '1' } : {};
 async function cleanup() {
   if (!TOKEN) { console.log('⚠️  Brak ADMIN_TOKEN – konta testowe NIE zostały usunięte.'); return null; }
   const r = await fetch(BASE + '/api/admin/sprzataj', { method: 'POST', headers: { 'x-admin-token': TOKEN, accept: 'application/json' } });
@@ -983,6 +984,45 @@ if (TOKEN) {
   const RL = new Client('rl', enf('rl'));
   for (let i = 0; i < 95; i++) statuses.push((await RL.post('/api/nieistnieje')).status);
   check(statuses.includes(429) && statuses.indexOf(429) >= 88, 'Limit żądań: 429 po przekroczeniu 90 POST/min z jednego IP', `pierwsze 429 przy #${statuses.indexOf(429) + 1}`);
+}
+
+// ---------- v9 etap 1: tarcza nowicjusza i seria logowań 30 dni ----------
+{
+  const NV = new Client(`Nowik_${suffix}`, { ...fpOf('nv'), 'x-test-no-shield': '0' });
+  r = await NV.post('/rejestracja', { username: NV.name, password: 'nowik123' });
+  NV.id = r.data.userId;
+  check(r.data.ok, `Rejestracja nowicjusza ${NV.name}`);
+  r = await NV.get('/kolonia', false);
+  check(typeof r.data === 'string' && r.data.includes('Tarcza nowicjusza aktywna') && r.data.includes('nb-chip'), 'Tarcza nowicjusza: komunikat i ikona z licznikiem');
+  r = await A.get('/bitwa', false);
+  check(typeof r.data === 'string' && !r.data.includes(`/bitwa/gracz/${NV.id}"`), 'Nowicjusz nie pojawia się na liście celów PvP');
+  r = await A.post(`/bitwa/gracz/${NV.id}`);
+  check(!r.data.ok && /tarczą nowicjusza/.test(r.data.msg), 'Atak na nowicjusza zablokowany', r.data.msg);
+  await sleep(4200);
+  r = await NV.post(`/bitwa/gracz/${A.id}`);
+  check(r.data.ok && /tarcza nowicjusza wygasła/.test(r.data.msg), 'Atak nowicjusza na gracza zdejmuje jego tarczę', r.data.msg);
+  r = await NV.get('/kolonia', false);
+  check(typeof r.data === 'string' && !r.data.includes('Tarcza nowicjusza aktywna'), 'Po ataku tarczy już nie ma');
+  r = await NV.post('/misje/logowanie');
+  check(r.data.ok && r.data.day === 1 && r.data.streak === 1, 'Seria: dzień 1/30', r.data.msg);
+  r = await NV.get('/misje', false);
+  check(typeof r.data === 'string' && (r.data.match(/class="day/g) || []).length === 30, 'Kalendarz ma 30 dni');
+  r = await NV.post('/misje/ratunek');
+  check(!r.data.ok, 'Ratunek niedostępny bez opuszczonego dnia', r.data.msg);
+  if (DEV) {
+    await NV.post('/api/dev/przewin', { minutes: 2 * 1440 });
+    r = await NV.get('/misje', false);
+    check(typeof r.data === 'string' && r.data.includes('/misje/ratunek'), 'Opuszczony 1 dzień → przycisk ratunku serii');
+    r = await NV.post('/misje/ratunek');
+    check(r.data.ok && r.data.streak === 1, 'Ratunek serii za kryształy', r.data.msg);
+    r = await NV.post('/misje/logowanie');
+    check(r.data.ok && r.data.day === 2 && r.data.streak === 2, 'Po ratunku seria trwa (dzień 2)', r.data.msg);
+    await NV.post('/api/dev/przewin', { minutes: 2 * 1440 });
+    r = await NV.post('/misje/ratunek');
+    check(!r.data.ok && /dostępny za/.test(r.data.msg), 'Ratunek tylko raz na 7 dni', r.data.msg);
+    r = await NV.post('/misje/logowanie');
+    check(r.data.ok && r.data.day === 1, 'Bez ratunku seria od nowa', r.data.msg);
+  }
 }
 
 // ---------- v8: audyt – grafiki srcset, ochrona słowników, Holo-rywal, odmiana ----------

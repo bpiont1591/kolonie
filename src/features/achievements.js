@@ -14,7 +14,7 @@ export async function achStats(q, u) {
   return {
     tutDone: u.tut_step === TUT.FINISHED ? 1 : 0, pve: u.pve_wins, pvp: u.pvp_wins, mine: u.b_mine,
     minB: Math.min(u.b_mine, u.b_power, u.b_shipyard, u.b_lab), expeditions: Number(ex.n), level: u.level, corp: u.corp_id ? 1 : 0,
-    boss: Number(boss.n), arena: Number(ar.n), arenaWins: Number(ar.w), streak: u.login_streak, pass: Number(pass.n) ? 1 : 0,
+    boss: Number(boss.n), arena: Number(ar.n), arenaWins: Number(ar.w), streak: Math.max(Number(u.login_streak) || 0, Number(u.streak_best) || 0), pass: Number(pass.n) ? 1 : 0,
   };
 }
 export const ownedSet = async (q, userId) => new Set((await q.all('SELECT ach FROM user_achievements WHERE user_id = ?', [userId])).map((r) => r.ach));

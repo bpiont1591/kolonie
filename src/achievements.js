@@ -17,6 +17,7 @@ export const LIST = [
   { id: 'gladiator', name: 'Gladiator', desc: 'Weź udział w 5 turniejach areny', stat: (s) => s.arena, goal: 5, title: 'Gladiator', r: { metal: 900, crystal: 450 } },
   { id: 'mistrz_areny', name: 'Mistrz areny', desc: 'Wygraj turniej areny', stat: (s) => s.arenaWins, goal: 1, title: 'Mistrz areny', r: { metal: 1500, crystal: 800, energy: 300 } },
   { id: 'wytrwaly', name: 'Wytrwały', desc: 'Loguj się 7 dni z rzędu', stat: (s) => s.streak, goal: 7, title: 'Wytrwały', r: { metal: 700, crystal: 350 } },
+  { id: 'niezlomny', name: 'Niezłomny', desc: 'Loguj się 30 dni z rzędu', stat: (s) => s.streak, goal: 30, title: 'Niezłomny', r: { metal: 3000, crystal: 1500, energy: 1000 } },
   { id: 'sezonowiec', name: 'Weteran sezonu', desc: 'Osiągnij 30. poziom przepustki sezonowej', stat: (s) => s.pass, goal: 1, title: 'Weteran sezonu', r: { metal: 2000, crystal: 1000 } },
 ];
 export const BY_ID = Object.fromEntries(LIST.map((a) => [a.id, a]));

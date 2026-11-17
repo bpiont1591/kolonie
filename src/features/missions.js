@@ -21,11 +21,23 @@ export default function registerMissions({ app, db, auth, page, action }) {
   app.post('/misje/logowanie', auth, action('/misje', async (t, u, now) => {
     const ls = Q.loginState(u, now);
     if (ls.claimedToday) fail('Dzisiejsza nagroda już odebrana – wróć jutro!');
-    const day = ls.next;
+    const day = ls.next, streak = ls.streak + 1;
     const rw = await G.grant(t, u, now, Q.scale(Q.LOGIN_REWARDS[day - 1], u.level));
-    await t.run('UPDATE users SET login_day = ?, login_streak = ? WHERE id = ?', [ls.today, day, u.id]);
+    await t.run('UPDATE users SET login_day = ?, login_streak = ?, streak_best = CASE WHEN streak_best < ? THEN ? ELSE streak_best END WHERE id = ?',
+      [ls.today, streak, streak, streak, u.id]);
     await G.track(t, u.id, now, { login: 1 });
-    return { msg: `Dzień ${day}/7: ${G.rewardText(rw)}`, data: { day, reward: rw } };
+    const ms = Q.MILESTONES.includes(day) ? ` Kamień milowy: ${day} dni!` : '';
+    return { msg: `Dzień ${day}/${Q.LOGIN_DAYS} (seria ${streak}): ${G.rewardText(rw)}.${ms}`, data: { day, streak, reward: rw, milestone: Q.MILESTONES.includes(day) } };
+  }));
+
+  // v9/1: ratunek serii – po opuszczeniu jednego dnia, za kryształy
+  app.post('/misje/ratunek', auth, action('/misje', async (t, u, now) => {
+    const ls = Q.loginState(u, now);
+    if (!ls.rescue) fail('Nie ma czego ratować – ratunek działa tylko po opuszczeniu dokładnie jednego dnia.');
+    if (!ls.rescue.ok) fail(`Ratunek serii będzie dostępny za ${ls.rescue.cooldownDays} ${ls.rescue.cooldownDays === 1 ? 'dzień' : 'dni'}.`);
+    if (u.crystal < ls.rescue.cost) fail(`Brakuje kryształów: potrzeba 💎${ls.rescue.cost}.`);
+    await t.run('UPDATE users SET crystal = crystal - ?, login_day = ?, streak_rescue_day = ? WHERE id = ?', [ls.rescue.cost, ls.today - 1, ls.today, u.id]);
+    return { msg: `Seria uratowana (${ls.rescue.lost} ${ls.rescue.lost === 1 ? "dzień" : "dni"})! Odbierz dzisiejszą nagrodę.`, data: { streak: ls.rescue.lost, cost: ls.rescue.cost } };
   }));
 
   app.post('/misje/odbierz/:id', auth, action('/misje', async (t, u, now, req) => {

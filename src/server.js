@@ -27,6 +27,7 @@ import * as AD from './admin.js';
 import registerAdmin, { addFlag, flagIfLinked, activeAnnouncements, stats as adStats } from './features/admin.js';
 import registerMarket from './features/market.js';
 import registerFleet from './features/fleet.js';
+import * as NB from './newbie.js';
 import registerCampaign from './features/campaign.js';
 import registerGear from './features/gear.js';
 import registerPrestige from './features/prestige.js';
@@ -261,9 +262,9 @@ app.post('/rejestracja', async (req, res, next) => {
       // zaproszenie z tego samego połączenia/urządzenia co zapraszający – bez nagrody (multikonto)
       const sameAsInviter = inviter && await t.get('SELECT 1 AS x FROM user_ips WHERE user_id = ? AND (ip_hash = ? OR device = ?) LIMIT 1', [inviter.id, fp.ip, fp.device]);
       const id = await t.insert(`INSERT INTO users (username, name_key, pass_hash, planet, created_at, metal, crystal, energy, collected_at, hp, hp_at, is_test, tut_step,
-          reg_ip, reg_device, referred_by, ref_state)
-        VALUES (?, ?, ?, ?, ?, 400, 200, 150, ?, ?, ?, ?, 1, ?, ?, ?, ?)`, [username, username.toLowerCase(), hash, planet, now, now - R.START_PENDING_MS, R.shipStats(base).maxHp, now, isTest,
-        fp.ip, fp.device, inviter?.id ?? null, sameAsInviter ? RF.STATE.blocked : RF.STATE.pending]);
+          reg_ip, reg_device, referred_by, ref_state, newbie_until)
+        VALUES (?, ?, ?, ?, ?, 400, 200, 150, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`, [username, username.toLowerCase(), hash, planet, now, now - R.START_PENDING_MS, R.shipStats(base).maxHp, now, isTest,
+        fp.ip, fp.device, inviter?.id ?? null, sameAsInviter ? RF.STATE.blocked : RF.STATE.pending, isTest && req.get('x-test-no-shield') === '1' ? 0 : now + NB.MS]);
       return id;
     });
     await recordSeen(db, id, req, now);
@@ -371,7 +372,8 @@ async function battleTargets(u, now, q = db) {
   return q.all(`SELECT u.id, u.username, u.level, u.prestige, u.planet, u.s_hull, u.s_guns, u.s_shields, c.tag
     FROM users u LEFT JOIN corps c ON c.id = u.corp_id
     WHERE u.id != ? AND u.level >= ? AND u.protected_until < ? AND (u.corp_id IS NULL OR u.corp_id != ?)
-    ORDER BY ABS(u.level - ?) ASC, u.id DESC LIMIT 10`, [u.id, u.level - 2, now, u.corp_id ?? -1, u.level]);
+      AND NOT (u.newbie_until > ? AND u.level < ?)
+    ORDER BY ABS(u.level - ?) ASC, u.id DESC LIMIT 10`, [u.id, u.level - 2, now, u.corp_id ?? -1, now, NB.MAX_LEVEL, u.level]);
 }
 
 app.get('/bitwa', auth, page(async (req, now, st) => {
@@ -435,6 +437,7 @@ app.post('/bitwa/gracz/:id', auth, action('/bitwa', async (t, u, now, req) => {
   if (d.id === u.id) fail('Nie możesz zaatakować samego siebie.');
   if (d.level < u.level - 2) fail('Ten gracz jest za słaby – honor komandora na to nie pozwala.');
   if (d.protected_until > now) fail('Ten gracz jest pod ochroną tarczy planetarnej.');
+  if (NB.shielded(d, now)) fail('Ten komandor jest pod tarczą nowicjusza – nie można go jeszcze atakować.');
   if (u.corp_id && d.corp_id === u.corp_id) fail('Nie atakuje się członków własnej korporacji!');
   const me = preBattle(u, now, R.PVP_ENERGY);
   const ds = R.shipStats(d);
@@ -449,7 +452,7 @@ app.post('/bitwa/gracz/:id', auth, action('/bitwa', async (t, u, now, req) => {
   const lv = R.addXp(u.level, u.xp, reward.xp);
   const hp = lv.levelsGained ? R.shipStats({ ...u, level: lv.level }).maxHp : Math.max(1, sim.aHp);
   await t.run(`UPDATE users SET energy = energy - ?, metal = metal + ?, crystal = crystal + ?, level = ?, xp = ?, hp = ?, hp_at = ?,
-      last_battle_at = ?, pvp_wins = pvp_wins + ?, pvp_losses = pvp_losses + ?, pvp_points = CASE WHEN pvp_points + ? > 0 THEN pvp_points + ? ELSE 0 END WHERE id = ?`,
+      last_battle_at = ?, newbie_until = 0, pvp_wins = pvp_wins + ?, pvp_losses = pvp_losses + ?, pvp_points = CASE WHEN pvp_points + ? > 0 THEN pvp_points + ? ELSE 0 END WHERE id = ?`,
     [me.cost, reward.metal, reward.crystal, lv.level, lv.xp, hp, now, now, sim.aWon ? 1 : 0, sim.aWon ? 0 : 1, sim.aWon ? 10 : -5, sim.aWon ? 10 : -5, u.id]);
   await t.run(`UPDATE users SET metal = metal - ?, crystal = crystal - ?, protected_until = ?,
       pvp_wins = pvp_wins + ?, pvp_losses = pvp_losses + ?, pvp_points = CASE WHEN pvp_points + ? > 0 THEN pvp_points + ? ELSE 0 END WHERE id = ?`,
@@ -463,7 +466,8 @@ app.post('/bitwa/gracz/:id', auth, action('/bitwa', async (t, u, now, req) => {
   fire(() => N.send(d.id, sim.aWon
     ? { title: 'Twoja kolonia została zaatakowana!', body: `${u.username} przełamał obronę i zabrał ${reward.metal} metalu i ${reward.crystal} kryształów. Tarcza aktywna przez 15 min.`, url: '/bitwa', tag: 'attack' }
     : { title: 'Odparto atak na kolonię', body: `Twoje drony obroniły kolonię przed ${u.username}.`, url: '/bitwa', tag: 'attack' }));
-  return { msg: sim.aWon ? `Zwycięstwo nad ${d.username}! Łup: 🔩${reward.metal} 💎${reward.crystal}` : `${d.username} odparł Twój atak.`,
+  const lostShield = NB.shielded(u, now) ? ' Twoja tarcza nowicjusza wygasła (zaatakowałeś gracza).' : '';
+  return { msg: (sim.aWon ? `Zwycięstwo nad ${d.username}! Łup: 🔩${reward.metal} 💎${reward.crystal}` : `${d.username} odparł Twój atak.`) + lostShield,
     redirect: `/bitwa/${battleId}`, data: { battleId, won: sim.aWon, reward: rw, rounds: sim.rounds } };
 }));
 
@@ -571,6 +575,12 @@ if (process.env.DEV_HOOKS === '1' && !process.env.RENDER) {
   }));
   app.post('/api/dev/poziom', auth, action('/', async (t, u, now, req) => {
     await t.run('UPDATE users SET level = ?, xp = 0 WHERE id = ?', [Math.max(1, Math.min(200, Number(req.body.level) || 1)), u.id]);
+    return { msg: 'ok' };
+  }));
+  // v9/1: tarcza nowicjusza (minutes=0 wyłącza, minutes>0 ustawia na tyle minut od teraz)
+  app.post('/api/dev/tarcza', auth, action('/', async (t, u, now, req) => {
+    const m = Math.max(0, Number(req.body.minutes) || 0);
+    await t.run('UPDATE users SET newbie_until = ? WHERE id = ?', [m ? now + m * 60_000 : 0, u.id]);
     return { msg: 'ok' };
   }));
   app.post('/api/dev/budynek', auth, action('/', async (t, u, now, req) => {

@@ -6,9 +6,12 @@ import { titleOf } from './achievements.js';
 import * as P from './progression.js';
 import * as GE from './gear.js';
 import { gearIcon } from './views-gear.js';
+import * as NB from './newbie.js';
 export { ic, pi, lvBadge };
 
 /** Polska odmiana: plural(2, 'nagroda', 'nagrody', 'nagród') -> 'nagrody'. */
+/** Krótki zapis liczby: 1200 → 1,2 tys. */
+export const fmtK = (n) => (n >= 10000 ? `${Math.round(n / 1000)} tys.` : n >= 1000 ? `${(Math.round(n / 100) / 10).toString().replace('.', ',')} tys.` : String(n));
 export const plural = (n, one, few, many) => (n === 1 ? one : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? few : many);
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 /** Tytuł przy nicku (z osiągnięć). */
@@ -72,6 +75,7 @@ export function layout({ title, user, st, body, flash, active = '', head = '', b
       ${R.RES_KEYS.map((k) => `<span>${resIcon(k)}<b>${fmt(st.stock[k])}</b></span>`).join('')}
     </div>
     ${user._admin ? `<a class="rank-link adm" href="/admin" aria-label="Panel administratora" title="Panel administratora">${pi('admin', 30)}</a>` : ''}
+    ${NB.shielded(user, Date.now()) ? `<a class="nb-chip" href="/kolonia" title="Tarcza nowicjusza – nie można Cię atakować" aria-label="Tarcza nowicjusza aktywna">${pi('newbie', 26)}<small data-countdown="${user.newbie_until}">${dur(user.newbie_until - Date.now())}</small></a>` : ''}
     <a class="rank-link${active === 'ranking' ? ' on' : ''}" href="/ranking" aria-label="Ranking" title="Ranking">${pi('trophy', 30)}</a>
     <a class="who" href="/osiagniecia" title="Osiągnięcia i tytuły">${lvBadge(user.level, 'sm')}<span>${esc(user.username)}${pBadge(user.prestige)}${titleOf(user.title) ? `<small class="who-t">${esc(titleOf(user.title))}</small>` : ''}</span></a>
   </header>` : '';
@@ -341,7 +345,10 @@ export function expeditionReport({ user, st, flash, ex, now }) {
 function colonyCallouts(user, st, now) {
   const out = [];
   const ls = Q.loginState(user, now);
-  if (!ls.claimedToday) out.push(`<a class="callout gold" href="/misje">${pi('daily', 48)}<span class="grow"><b>Nagroda dnia czeka!</b><br><small>Dzień ${ls.next}/7 kalendarza logowań${ls.next === 7 ? ' – rzadki Rdzeń kwantowy!' : ''}</small></span>${ic('up', 'chev-r')}</a>`);
+  const nb = NB.left(user, now);
+  if (nb) out.push(`<div class="callout newbie">${pi('newbie', 48)}<span class="grow"><b>Tarcza nowicjusza aktywna</b><br><small>Inni gracze nie mogą Cię atakować jeszcze przez <span data-countdown="${user.newbie_until}">${dur(nb)}</span> (lub do poziomu ${NB.MAX_LEVEL}). Atak na gracza wyłącza tarczę.</small></span></div>`);
+  if (ls.rescue && !ls.claimedToday) out.push(`<a class="callout warn-c" href="/misje#seria">${pi('streak', 48)}<span class="grow"><b>Seria ${ls.rescue.lost} ${plural(ls.rescue.lost, 'dnia', 'dni', 'dni')} zagrożona!</b><br><small>Opuściłeś jeden dzień. ${ls.rescue.ok ? `Uratuj serię za ${resIcon('crystal', 14)}${fmt(ls.rescue.cost)}.` : `Ratunek dostępny za ${ls.rescue.cooldownDays} ${plural(ls.rescue.cooldownDays, 'dzień', 'dni', 'dni')}.`}</small></span>${ic('up', 'chev-r')}</a>`);
+  else if (!ls.claimedToday) out.push(`<a class="callout gold" href="/misje">${pi('daily', 48)}<span class="grow"><b>Nagroda dnia czeka!</b><br><small>Dzień ${ls.next}/${Q.LOGIN_DAYS} kalendarza${ls.streak ? ` · seria ${ls.streak} ${plural(ls.streak, 'dzień', 'dni', 'dni')}` : ''}${Q.MILESTONES.includes(ls.next) ? ' – kamień milowy!' : ''}</small></span>${ic('up', 'chev-r')}</a>`);
   if ((user.boost_until || 0) > now) out.push(`<div class="callout rare">${pi('core', 48)}<span class="grow"><b>${Q.CORE.name} aktywny</b><br><small>+${R.BOOST_BONUS * 100}% wydobycia jeszcze przez <span data-countdown="${user.boost_until}">${dur(user.boost_until - now)}</span></small></span></div>`);
   return out.join('');
 }
@@ -530,13 +537,18 @@ export function notFound({ user, st }) {
 export function missions({ user, st, flash, qs, resetIn, weekIn, now, season }) {
   const ls = qs.login;
   const days = Q.LOGIN_REWARDS.map((r0, i) => {
-    const d = i + 1, r = Q.scale(r0, user.level);
+    const d = i + 1, r = Q.scale(r0, user.level), ms = Q.MILESTONES.includes(d);
     const done = d <= ls.doneUpTo, today = !ls.claimedToday && d === ls.next;
-    const main = r.core ? pi('core', 40) : r.metal ? resIcon('metal', 34) : r.crystal ? resIcon('crystal', 34) : resIcon('energy', 34);
-    const amount = r.core ? 'Rdzeń' : fmt(r.metal || r.crystal || r.energy);
-    return `<div class="day${done ? ' done' : ''}${today ? ' today' : ''}${d === 7 ? ' rare' : ''}" title="${esc(Object.entries(r).map(([k, v]) => `${R.RESOURCES[k]?.name || ({ core: 'Rdzeń', xp: 'XP', cores: 'Rdzenie' })[k] || k}: ${fmt(v)}`).join(', '))}">
-      <small>Dzień ${d}</small>${main}<b>${amount}</b>${done ? `<span class="ok">${ic('check')}</span>` : ''}</div>`;
+    const main = r.core ? pi('core', ms ? 34 : 28) : r.metal ? resIcon('metal', 26) : r.crystal ? resIcon('crystal', 26) : resIcon('energy', 26);
+    const amount = r.core ? (r.core > 1 ? `${r.core}× Rdzeń` : 'Rdzeń') : fmtK(r.metal || r.crystal || r.energy);
+    return `<div class="day${done ? ' done' : ''}${today ? ' today' : ''}${ms ? ' rare' : ''}" title="${esc(`Dzień ${d}: ` + Object.entries(r).map(([k, v]) => `${R.RESOURCES[k]?.name || ({ core: 'Rdzeń kwantowy', xp: 'XP' })[k] || k}: ${fmt(v)}`).join(', '))}">
+      <small>${d}</small>${main}<b>${amount}</b>${done ? `<span class="ok">${ic('check')}</span>` : ''}</div>`;
   }).join('');
+  const nm = ls.nextMilestone;
+  const toMs = nm ? nm - (ls.claimedToday ? ls.doneUpTo : ls.next - 1) : 0;
+  const rescue = ls.rescue && !ls.claimedToday ? `<div class="rescue">${pi('streak', 40)}<div class="grow"><b>Seria ${ls.rescue.lost} ${plural(ls.rescue.lost, 'dnia', 'dni', 'dni')} zagrożona</b><br>
+      <small class="muted">Opuściłeś jeden dzień. Uratuj serię, zanim odbierzesz nagrodę – inaczej kalendarz zacznie się od dnia 1. Ratunek: raz na ${Q.RESCUE_COOLDOWN_DAYS} dni.</small></div>
+      ${ls.rescue.ok ? `<form method="post" action="/misje/ratunek"><button class="btn sm cta">Uratuj · ${resIcon('crystal', 15)}${fmt(ls.rescue.cost)}</button></form>` : `<small class="muted">za ${ls.rescue.cooldownDays} ${plural(ls.rescue.cooldownDays, 'dzień', 'dni', 'dni')}</small>`}</div>` : '';
   const nextR = Q.scale(Q.LOGIN_REWARDS[ls.next - 1], user.level);
   const claim = ls.claimedToday
     ? `<button class="btn wide" disabled>${ic('check')} Odebrano – kolejna nagroda za <span data-countdown="${now + resetIn}">${dur(resetIn)}</span></button>`
@@ -561,10 +573,12 @@ export function missions({ user, st, flash, qs, resetIn, weekIn, now, season }) 
     <span class="mini-bar"><i style="width:${season.max ? 100 : Math.round(season.inLevel / season.need * 100)}%"></i></span></span>${ic('up', 'chev-r')}</a>` : '';
   return layout({ title: 'Misje', user, st, flash, active: 'misje', body: `
   ${sc}
-  <section class="card daily-card">
+  <section class="card daily-card" id="seria">
     <div class="with-ic">${pi('daily', 52)}<div class="grow"><h2 style="margin:0">Nagroda dnia</h2>
-      <small class="muted">Seria: <b>${ls.streak}</b> ${ls.streak === 1 ? 'dzień' : 'dni'} z rzędu · co 7. dzień rzadki przedmiot</small></div></div>
-    ${ls.broken ? '<p class="warn small">Seria przerwana – pominięto dzień, kalendarz zaczyna się od nowa.</p>' : ''}
+      <small class="muted">Seria: <b>${ls.streak}</b> ${plural(ls.streak, 'dzień', 'dni', 'dni')} z rzędu · rekord ${ls.best} · kamienie milowe: ${Q.MILESTONES.join(', ')}. dzień</small></div>${pi('streak', 44)}</div>
+    ${nm && !ls.rescue ? `<p class="small muted">Do kamienia milowego (dzień ${nm}): <b>${toMs}</b> ${plural(toMs, 'dzień', 'dni', 'dni')}. Nagrody rosną z każdym dniem serii.</p>` : ''}
+    ${rescue}
+    ${ls.broken && !ls.rescue ? '<p class="warn small">Seria przerwana – pominięto więcej niż jeden dzień, kalendarz zaczyna się od nowa.</p>' : ''}
     <div class="cal">${days}</div>
     ${claim}
   </section>
