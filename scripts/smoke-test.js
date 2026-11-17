@@ -994,10 +994,11 @@ if (TOKEN) {
   check(big.status === 200 && Number(big.headers.get('content-length') || 1) > 0, 'Wariant 1024 px grafiki bossa dostępny');
   for (const path of ['/statek/klasa/constructor', '/badania/start/__proto__', '/badania/start/toString']) {
     r = await A.post(path);
-    check(r.status === 404 && r.data.ok === false, `Nazwa z prototypu w ścieżce → 404, nie 500 (${path})`, r.status);
+    // 403 = zapora brzegowa Render/Cloudflare blokuje „__proto__” jeszcze przed aplikacją
+    check(r.status === 404 ? r.data.ok === false : r.status === 403, `Nazwa z prototypu w ścieżce → 404/403, nie 500 (${path})`, r.status);
   }
   r = await A.get('/kampania/__proto__', false);
-  check(r.status === 404, 'GET z nazwą z prototypu → 404', r.status);
+  check([403, 404].includes(r.status), 'GET z nazwą z prototypu → 404/403', r.status);
   r = await A.get('/bitwa', false);
   const hasHolo = typeof r.data === 'string' && r.data.includes('/bitwa/holo');
   r = await A.post('/bitwa/holo');
