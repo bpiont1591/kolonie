@@ -47,12 +47,18 @@ export function state(u, now) {
 export function hpBar(st) {
   const pct = Math.round((st.ship.hp / st.ship.maxHp) * 100);
   return `<div class="bar hp" data-live-hp data-hp="${st.ship.hp}" data-max="${st.ship.maxHp}" data-rate="${(st.ship.repair / 60).toFixed(4)}">
-    <i style="width:${pct}%"></i><span>${ic('heart', 'hp-ic')} <b data-hp-text>${st.ship.hp}</b>/${st.ship.maxHp} HP</span></div>`;
+    <i style="width:${pct}%"></i><span>${ic('heart', 'hp-ic')} <em class="frac"><b data-hp-text>${st.ship.hp}</b>/${st.ship.maxHp} HP</em></span></div>`;
 }
 
 const V = ASSET_V; // wersja zasobów statycznych (cache-busting)
-export const img = (name, alt = '', cls = '', size = 64, eager = false) =>
-  `<img src="/img/${name}.webp?v=${V}" alt="${esc(alt)}" class="${cls}" width="${size}" height="${size}" decoding="async"${eager ? '' : ' loading="lazy"'}>`;
+/** v8: grafiki z wariantami szerokości (build-assets.py) – srcset, by były ostre przy DPR 2–3×. */
+const ART = /^(ship|boss|cls_\w+|b_(mine|power|shipyard|lab)|p_\w+|pl_\d+|cb_\d+)$/;
+const ART_W = [256, 384, 512, 768, 1024];
+const WIDE = /^(ev_\w+|battle_bg|expedition_bg)$/; // tła 16:9: warianty 640/1280
+export const srcset = (name) => (WIDE.test(name) ? [640, 1280] : ART_W).map((w) => `/img/${name}-${w}.webp?v=${V} ${w}w`).join(', ');
+/** size = przybliżona szerokość wyświetlania w px CSS; sizes = własny atrybut sizes (np. dla grafik na całą szerokość karty). */
+export const img = (name, alt = '', cls = '', size = 64, eager = false, sizes = '') =>
+  `<img src="/img/${name}.webp?v=${V}"${ART.test(name) || WIDE.test(name) ? ` srcset="${srcset(name)}" sizes="${sizes || `${size}px`}"` : ''} alt="${esc(alt)}" class="${cls}" width="${size}" height="${size}" decoding="async"${eager ? '' : ' loading="lazy"'}>`;
 /** v7/4: znak rangi prestiżu przy nicku. */
 export const pBadge = (n) => (Number(n) > 0 ? `<span class="pbadge" title="Prestiż: ranga ${Number(n)}">${ic('prestige')}${Number(n)}</span>` : '');
 export const resIcon = (k, size = 18) => `<img src="/img/r_${k}.webp?v=${V}" alt="${R.RESOURCES[k].name}" title="${R.RESOURCES[k].name}" class="ri" width="${size}" height="${size}">`;
@@ -138,7 +144,7 @@ export function landing({ online, players, battles24, top, flash, baseUrl, invit
 <meta name="twitter:description" content="${esc(SITE_DESC)}"><meta name="twitter:image" content="${esc(url)}/img/og.jpg?v=${V}">
 <link rel="preload" href="/img/hero.webp?v=${V}" as="image" fetchpriority="high">`;
   const stat = (n, label) => `<div class="stat"><b>${fmt(n)}</b><span>${label}</span></div>`;
-  const pirates = R.PIRATES.map((p) => `<figure class="pirate-card">${img('p_' + p.id, p.name, '', 160)}
+  const pirates = R.PIRATES.map((p) => `<figure class="pirate-card">${img('p_' + p.id, p.name, '', 160, false, '(min-width:620px) 140px, 42vw')}
     <figcaption><b>${p.name}</b><small>${p.minLvl > 1 ? `od poziomu ${p.minLvl}` : 'dla każdego'}</small></figcaption></figure>`).join('');
   const rank = top.length ? top.map((r, i) => `<li><span class="pos">${i + 1}</span><b>${esc(r.username)}</b>${pBadge(r.prestige)}${r.tag ? ` <span class="corp">[${esc(r.tag)}]</span>` : ''}<span class="grow"></span>${lvBadge(r.level)}</li>`).join('')
     : '<li class="muted">Ranking czeka na pierwszego komandora – może to będziesz Ty?</li>';
@@ -166,7 +172,7 @@ export function landing({ online, players, battles24, top, flash, baseUrl, invit
     <div class="bt-inner">
       <h2 class="section-title">Bitwy w kilka sekund</h2>
       <p>Każde starcie to szybki raport: salwy plazmowe, torpedy jonowe, trafienia krytyczne. Zwycięstwo daje XP, metal i kryształy.</p>
-      <div class="pirates">${pirates}</div>
+      <div class="pirates" tabindex="0" aria-label="Frakcje piratów – przewiń w bok">${pirates}</div>
     </div>
   </section>
 
@@ -407,7 +413,7 @@ export function ship({ user, st, flash, now = Date.now() }) {
   }).join('');
   return layout({ title: 'Statek', user, st, flash, active: 'statek', body: `
   <section class="card center ship-card" style="--shield:${Math.min(0.15 + user.s_shields * 0.07, 0.8).toFixed(2)}">
-    <div class="ship-art">${img(P.CLASSES[user.ship_class] ? `cls_${user.ship_class}` : 'ship', 'Twój statek', '', 320, true)}</div>
+    <div class="ship-art">${img(P.CLASSES[user.ship_class] ? `cls_${user.ship_class}` : 'ship', 'Twój statek', '', 300, true)}</div>
     <h2>Statek „${esc(user.username)}” ${pBadge(user.prestige)}</h2>
     ${P.CLASSES[user.ship_class] ? `<a class="cls-badge" href="/statek/klasa">${ic(P.CLASSES[user.ship_class].icon)}${P.CLASSES[user.ship_class].name}</a>` : ''}
     ${hpBar(st)}
@@ -449,10 +455,17 @@ export function battle({ user, st, flash, targets, recent, now, arena }) {
         <div class="muted small">poz. ${t.level} · siła ${R.power(t)} · ${esc(t.planet)}</div></div>
       <form method="post" action="/bitwa/gracz/${t.id}"><button class="btn sm danger">${ic('battle')}<span class="en">${resIcon('energy', 16)}${R.PVP_ENERGY}</span></button></form>
     </div>`).join('') : '<p class="muted">Brak dostępnych celów w Twoim zasięgu.</p>';
+  // v8: symulator, gdy brakuje prawdziwych rywali (misje PvP nie mogą być niewykonalne)
+  const holo = targets.length < 3 ? `<div class="item holo">
+      <span class="avatar">H</span>
+      <div class="grow"><b>Holo-rywal</b> <small class="muted">· symulacja</small>
+        <div class="muted small">Kopia Twojego statku (85–90% mocy). Liczy się do misji „Zaatakuj gracza”, bez łupu i punktów PvP.</div></div>
+      <form method="post" action="/bitwa/holo"><button class="btn sm danger" aria-label="Walcz z Holo-rywalem">${ic('battle')}<span class="en">${resIcon('energy', 16)}${R.PVP_ENERGY}</span></button></form>
+    </div>` : '';
   const rec = recent.length ? recent.map((b) => {
     const mine = b.attacker_id === user.id;
     const won = mine ? b.attacker_won : !b.attacker_won;
-    const label = b.kind === 'pve' ? b.enemy_name : mine ? `atak na ${esc(b.defender_name)}` : `obrona przed ${esc(b.attacker_name)}`;
+    const label = b.kind === 'pve' ? b.enemy_name : mine ? `atak na ${esc(b.defender_name ?? b.enemy_name)}` : `obrona przed ${esc(b.attacker_name)}`;
     return `<a class="item link" href="/bitwa/${b.id}">${pi(won ? 'trophy' : 'defeat', 40, 'res-ic', won ? 'Wygrana' : 'Porażka')}
       <span class="grow">${label}<br><small class="muted">${ago(b.created_at, now)}</small></span>${ic('up', 'chev-r')}</a>`;
   }).join('') : '<p class="muted">Jeszcze nie walczyłeś.</p>';
@@ -464,7 +477,7 @@ export function battle({ user, st, flash, targets, recent, now, arena }) {
   <a class="callout ev-cta" href="/wydarzenia">${ic('event', 'big-ev')}<span class="grow"><b>Wydarzenia</b><br><small class="muted">${st?.events?.length ? `Trwa: ${st.events.map((e) => (EV_NAMES[e.kind] || [e.kind])[0]).join(', ')}` : 'Inwazje obcych, podwójne łupy, happy hour ekspedycji'}</small></span>${ic('up', 'chev-r')}</a>
   <a class="callout camp-cta" href="/kampania">${img('pl_5', 'Kampania', 'camp-ic', 56)}<span class="grow"><b>Kampania: Sygnał z Otchłani</b><br><small class="muted">10 planet · tryb trudny · bossowie z unikalnym łupem i modułami</small></span>${ic('up', 'chev-r')}</a>
   <section class="card"><h3 class="with-ic">${pi('defeat', 30)} Piraci</h3>${pir}</section>
-  <section class="card"><h3 class="with-ic">${pi('pvp', 30)} Inni gracze</h3><p class="muted small">Wygrana = łup 10% metalu i kryształów rywala. Zaatakowany gracz dostaje 15 min ochrony.</p>${tg}</section>
+  <section class="card"><h3 class="with-ic">${pi('pvp', 30)} Inni gracze</h3><p class="muted small">Wygrana = łup 10% metalu i kryształów rywala. Zaatakowany gracz dostaje 15 min ochrony.</p>${tg}${holo}${holo}</section>
   <section class="card"><h3 class="with-ic">${ic('log', 'acc')} Ostatnie bitwy</h3>${rec}</section>` });
 }
 
@@ -484,7 +497,7 @@ export function battleLog({ user, st, flash, b, now }) {
   <section class="card center result banner ${won ? 'win' : 'lose'}" style="--bg:url('/img/battle_bg.webp?v=${V}')">
     ${camp ? img(rw.boss ? `cb_${camp[0]}` : `pl_${camp[0]}`, b.enemy_name, 'enemy', 120, true) : b.kind === 'pve' && rw.tier ? img('p_' + rw.tier, b.enemy_name, 'enemy', 120, true) : pi(won ? 'trophy' : 'defeat', 120, 'big-ic')}
     <h2>${won ? 'ZWYCIĘSTWO' : 'PORAŻKA'}</h2>
-    <p>${esc(b.attacker_name)} <span class="muted">vs</span> ${esc(b.kind === 'pve' ? b.enemy_name : b.defender_name)}</p>
+    <p>${esc(b.attacker_name)} <span class="muted">vs</span> ${esc(b.kind === 'pve' ? b.enemy_name : b.defender_name ?? b.enemy_name)}</p>
     ${rw.evPts && mine ? `<p class="relic-drop">${ic('event', 'acc')} +${rw.evPts} pkt dla serwera w inwazji</p>` : ''}${rw.item && mine && GE.BY_ID[rw.item.def] ? `<a class="relic-drop gdrop r${rw.item.rarity}" href="/statek/moduly">${gearIcon(rw.item.def, rw.item.rarity, 44)}<span>Moduł specjalny: <b>${GE.label(rw.item)}</b><br><small class="muted">${GE.effectText(rw.item.def, rw.item.rarity, 1)}</small></span></a>` : ''}${campLine}${mine && rewardLine ? `<p class="reward">${rewardLine}</p>` : ''}
     <p class="muted small">${ago(b.created_at, now)}</p>
   </section>
@@ -498,11 +511,11 @@ export function ranking({ user, st, flash, tab, rows, myRank }) {
   let body;
   if (tab === 'korporacje') {
     body = rows.map((c, i) => `<div class="item rank"><span class="pos">${i + 1}</span><span class="grow"><b>${esc(c.name)}</b> <span class="corp">[${esc(c.tag)}]</span>
-      <br><small class="muted">${c.members} członków</small></span><b class="pts">${pi('power', 20, 'inl')}${fmt(c.power)}</b></div>`).join('');
+      <br><small class="muted">${c.members} ${plural(c.members, 'członek', 'członków', 'członków')}</small></span><b class="pts">${pi('power', 20, 'inl')}${fmt(c.power)}</b></div>`).join('');
   } else {
     body = rows.map((r, i) => `<div class="item rank ${r.id === user.id ? 'me' : ''}"><span class="pos">${i + 1}</span>
       <span class="grow"><b>${esc(r.username)}</b>${pBadge(r.prestige)}${ttl(r.title)} ${r.tag ? `<span class="corp">[${esc(r.tag)}]</span>` : ''}<br>
-      <small class="muted">${tab === 'pvp' ? `${r.pvp_wins} W / ${r.pvp_losses} P` : tab === 'prestiz' ? `najwyższy poziom ${Math.max(r.peak_level || 0, r.level)} · teraz poz. ${r.level}` : `${fmt(r.xp)} XP · ${r.pve_wins} piratów`}</small></span>
+      <small class="muted">${tab === 'pvp' ? `${r.pvp_wins} W / ${r.pvp_losses} P` : tab === 'prestiz' ? `najwyższy poziom ${Math.max(r.peak_level || 0, r.level)} · teraz poz. ${r.level}` : `${fmt(r.xp)} XP · pokonani piraci: ${fmt(r.pve_wins)}`}</small></span>
       ${tab === 'pvp' ? `<b class="pts">${pi('pvp', 20, 'inl')}${r.pvp_points}</b>` : tab === 'prestiz' ? `<b class="pts pr-pts">${ic('prestige', 'gold-ic')}${r.prestige}</b>` : lvBadge(r.level)}</div>`).join('');
   }
   return layout({ title: 'Ranking', user, st, flash, active: 'ranking', body: `
@@ -521,7 +534,7 @@ export function missions({ user, st, flash, qs, resetIn, weekIn, now, season }) 
     const done = d <= ls.doneUpTo, today = !ls.claimedToday && d === ls.next;
     const main = r.core ? pi('core', 40) : r.metal ? resIcon('metal', 34) : r.crystal ? resIcon('crystal', 34) : resIcon('energy', 34);
     const amount = r.core ? 'Rdzeń' : fmt(r.metal || r.crystal || r.energy);
-    return `<div class="day${done ? ' done' : ''}${today ? ' today' : ''}${d === 7 ? ' rare' : ''}" title="${esc(Object.entries(r).map(([k, v]) => `${k}: ${v}`).join(', '))}">
+    return `<div class="day${done ? ' done' : ''}${today ? ' today' : ''}${d === 7 ? ' rare' : ''}" title="${esc(Object.entries(r).map(([k, v]) => `${R.RESOURCES[k]?.name || ({ core: 'Rdzeń', xp: 'XP', cores: 'Rdzenie' })[k] || k}: ${fmt(v)}`).join(', '))}">
       <small>Dzień ${d}</small>${main}<b>${amount}</b>${done ? `<span class="ok">${ic('check')}</span>` : ''}</div>`;
   }).join('');
   const nextR = Q.scale(Q.LOGIN_REWARDS[ls.next - 1], user.level);

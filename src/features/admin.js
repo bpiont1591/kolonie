@@ -2,6 +2,7 @@
 import * as AD from '../admin.js';
 import { adminTokenOk, linkedAccounts } from '../security.js';
 import * as VA from '../views-admin.js';
+import { notFound, state } from '../views.js';
 import * as EV from '../events.js';
 import { resetEventsCache, settleEnded } from './events.js';
 import { N, fire } from '../notify.js';
@@ -36,7 +37,7 @@ export default function registerAdmin({ app, db, auth, page, respond, wantsJson 
     const viaToken = adminTokenOk(req.get('x-admin-token'));
     if (req.user && (AD.isAdmin(req.user) || viaToken)) { req.adminName = req.user.username; return next(); }
     if (wantsJson(req)) return res.status(404).json({ ok: false, msg: 'Nie znaleziono.' });
-    res.status(404).send('Nie znaleziono.');
+    res.status(404).send(notFound({ user: req.user, st: req.user && state(req.user, Date.now()) })); // v8: pełna strona 404 zamiast gołego tekstu
   };
   const log = (who, action, target, now = Date.now()) => db.run('INSERT INTO admin_log (admin, action, target, created_at) VALUES (?, ?, ?, ?)', [who, action, String(target).slice(0, 200), now]);
   const act = (redirect, fn) => async (req, res, next) => {
@@ -136,7 +137,7 @@ export default function registerAdmin({ app, db, auth, page, respond, wantsJson 
   app.post('/admin/ogloszenie', auth, guard, act('/admin', async (req, now) => {
     const text = String(req.body.text || '').trim().slice(0, 280);
     if (text.length < 3) return { ok: false, msg: 'Treść ogłoszenia jest za krótka.' };
-    const kind = AD.ANN_KINDS[req.body.kind] ? req.body.kind : 'info';
+    const kind = Object.hasOwn(AD.ANN_KINDS, String(req.body.kind)) ? req.body.kind : 'info';
     const hours = Math.min(24 * 30, Math.max(1, Number(req.body.hours) || 24));
     const audience = req.body.audience === 'test' || req.user.is_test ? 'test' : 'all';
     const id = await db.insert('INSERT INTO announcements (text, kind, audience, created_at, expires_at, created_by) VALUES (?, ?, ?, ?, ?, ?)', [text, kind, audience, now, now + hours * 3600_000, req.adminName]);
@@ -146,7 +147,7 @@ export default function registerAdmin({ app, db, auth, page, respond, wantsJson 
   }));
   // Ręczne uruchomienie wydarzenia (np. inwazji poza weekendem). Wydarzenia z kont testowych widzą tylko konta testowe.
   app.post('/admin/wydarzenie', auth, guard, act('/admin#wyd', async (req, now) => {
-    const kind = EV.KINDS[req.body.kind] ? req.body.kind : null;
+    const kind = Object.hasOwn(EV.KINDS, String(req.body.kind)) ? req.body.kind : null;
     if (!kind) return { ok: false, msg: 'Wybierz rodzaj wydarzenia.' };
     const hours = Math.min(72, Math.max(1, Number(req.body.hours) || 2));
     const test = req.user.is_test ? 1 : 0;

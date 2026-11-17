@@ -21,7 +21,7 @@ export default function registerFleet({ app, auth, page, action, onSettled }) {
       classes: P.CLASS_IDS.map((id) => ({ id, name: P.CLASSES[id].name, mods: P.CLASSES[id].m })) });
   });
   app.post('/statek/klasa/:id', auth, action('/statek/klasa', async (t, u, now, req) => {
-    const c = P.CLASSES[req.params.id] || fail('Nieznana klasa statku.');
+    const c = (Object.hasOwn(P.CLASSES, req.params.id) && P.CLASSES[req.params.id]) || fail('Nieznana klasa statku.');
     const cs = classState(u, now);
     if (cs.locked) fail('Najpierw ukończ lub pomiń samouczek – klasę wybierzesz zaraz potem.');
     if (u.ship_class === c.id) fail(`Twój statek już jest klasy ${c.name}.`);
@@ -43,7 +43,7 @@ export default function registerFleet({ app, auth, page, action, onSettled }) {
     res.set('Cache-Control', 'no-store').json({ ok: true, rpTotal: P.rpTotal(u), rpFree: P.rpFree(u), tech: P.techList(u), rq: u.rq_id || null, rqUntil: u.rq_until || 0, mods: P.mods(u) });
   });
   app.post('/badania/start/:id', auth, action('/badania', async (t, u, now, req) => {
-    const n = P.TECH_BY_ID[req.params.id] || fail('Nieznana technologia.');
+    const n = (Object.hasOwn(P.TECH_BY_ID, req.params.id) && P.TECH_BY_ID[req.params.id]) || fail('Nieznana technologia.');
     const why = P.canResearch(u, n);
     if (why) fail(why);
     const c = P.researchCost(n);

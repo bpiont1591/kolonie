@@ -82,7 +82,7 @@ export default function registerGear({ app, db, auth, page, action, dev }) {
 
   if (dev) {
     app.post('/api/dev/modul', auth, action('/statek/moduly', async (t, u, now, req) => {
-      const def = GE.BY_ID[req.body.def] ? req.body.def : 'plazma', r = Math.min(3, Math.max(1, Number(req.body.rarity) || 1));
+      const def = Object.hasOwn(GE.BY_ID, String(req.body.def)) ? req.body.def : 'plazma', r = Math.min(3, Math.max(1, Number(req.body.rarity) || 1));
       const id = await t.insert('INSERT INTO items (user_id, def, rarity, level, slot, source, created_at) VALUES (?, ?, ?, ?, 0, ?, ?)', [u.id, def, r, Math.min(GE.MAX_LEVEL, Number(req.body.level) || 1), 'dev', now]);
       return { msg: 'ok', data: { id } };
     }));

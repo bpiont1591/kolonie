@@ -50,7 +50,7 @@ export default function registerCorp({ app, db, auth, page, action, payable, cos
   app.get('/korporacja/wojna', auth, page(async (req, now, st) => VC.war({ user: req.user, st, flash: req.flash, w: await warState(db, now, req.user.corp_id), now })));
   app.get('/korporacja/boss', auth, page(async (req, now, st) => {
     const u = req.user;
-    if (!u.corp_id) return VC.noCorp({ user: u, st, flash: req.flash, what: 'bossa rajdowego' });
+    if (!u.corp_id) return VC.noCorp({ user: u, st, flash: req.flash, what: 'bossem rajdowym' });
     const b = await currentBoss(db, u.corp_id, now);
     const hits = b ? await db.all('SELECT h.*, u.username FROM boss_hits h JOIN users u ON u.id = h.user_id WHERE h.boss_id = ? ORDER BY h.damage DESC', [b.id]) : [];
     return VC.boss({ user: u, st, flash: req.flash, b, hits, now });

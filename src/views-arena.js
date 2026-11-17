@@ -32,7 +32,7 @@ export function arena({ user, st, flash, sum, entrants, last, mine, now }) {
   const ent = entrants.length ? entrants.map((e, i) => `<div class="item${e.id === user.id ? ' me' : ''}"><span class="pos">${i + 1}</span>
     <span class="grow"><b>${esc(e.username)}</b>${pBadge(e.prestige)}${ttl(e.title)}<br><small class="muted">siła ${R.power(e)}</small></span>${lvBadge(e.level, 'sm')}</div>`).join('')
     : '<p class="muted">Nikt jeszcze się nie zapisał – bądź pierwszy!</p>';
-  const rewards = [1, 2, 3, 5, 9].map((p) => `<li>${placeIcon(p, 26)}<span>${AR.placeLabel(p).replace('9.–17. miejsce', 'pozostali')}</span><span class="chips">${rewardChips(Q.scale(AR.placeReward(p), user.level), 13)}</span><small class="muted">+${AR.seasonXpFor(p)} XP sez.</small></li>`).join('');
+  const rewards = [1, 2, 3, 5, 9].map((p) => `<li>${placeIcon(p, 26)}<span>${AR.placeLabel(p).replace('9.–17. miejsce', 'pozostali')}</span><span class="chips">${rewardChips(Q.scale(AR.placeReward(p), user.level), 13)}</span><small class="muted">+${AR.seasonXpFor(p)} XP sezonu</small></li>`).join('');
   const hist = mine.length ? mine.map((r) => `<a class="item link" href="/arena/turniej/${Number(r.start)}">${placeIcon(Number(r.place))}<span class="grow">${AR.placeLabel(Number(r.place))}<br><small class="muted">${when(Number(r.start))}</small></span>${ic('up', 'chev-r')}</a>`).join('')
     : '<p class="muted">Nie brałeś jeszcze udziału w turnieju.</p>';
   const lastBr = last ? JSON.parse(last.bracket) : null;
@@ -44,7 +44,7 @@ export function arena({ user, st, flash, sum, entrants, last, mine, now }) {
     ${sum.joined ? `<p class="ok-line">${ic('check')} Jesteś zapisany na ten turniej.</p>` : ''}${btn}</section>
   <section class="card"><h3 class="with-ic">${pi('trophy', 30)} Nagrody</h3><ul class="arena-rw">${rewards}</ul></section>
   <section class="card"><h3 class="with-ic">${ic('users', 'acc')} Zapisani</h3>${ent}</section>
-  ${last ? `<section class="card"><h3 class="with-ic">${pi('arena', 30)} Ostatni turniej <small class="muted">· ${when(Number(last.start))} · ${last.players} graczy</small></h3>${bracket(lastBr, user.id)}</section>` : ''}
+  ${last ? `<section class="card"><h3 class="with-ic">${pi('arena', 30)} Ostatni turniej <small class="muted">· ${when(Number(last.start))} · ${last.players} ${plural(last.players, 'gracz', 'graczy', 'graczy')}</small></h3>${bracket(lastBr, user.id)}</section>` : ''}
   <section class="card"><h3 class="with-ic">${ic('log', 'acc')} Twoje turnieje</h3>${hist}</section>
   <a class="btn wide" href="/bitwa">${ic('login', 'flip')} Wróć do bitew</a>` });
 }
@@ -54,7 +54,7 @@ export function tournament({ user, st, flash, tr, mine, now }) {
   const head = tr.status === 'cancelled' ? '<p class="muted">Turniej odwołany – za mało chętnych. Energia została zwrócona.</p>'
     : mine ? `<div class="callout gold">${placeIcon(Number(mine.place), 52)}<span class="grow"><b>${AR.placeLabel(Number(mine.place))}</b><br><small>${rewardChips(JSON.parse(mine.reward), 14)}</small></span></div>` : '';
   return layout({ title: 'Turniej areny', user, st, flash, active: 'bitwa', body: `
-  <section class="card"><h2 class="with-ic">${pi('arena', 40)} Turniej ${when(Number(tr.start))}</h2><p class="muted small">${tr.players} graczy · rozegrany ${ago(Number(tr.resolved_at), now)}</p>${head}</section>
+  <section class="card"><h2 class="with-ic">${pi('arena', 40)} Turniej ${when(Number(tr.start))}</h2><p class="muted small">${tr.players} ${plural(tr.players, 'gracz', 'graczy', 'graczy')} · rozegrany ${ago(Number(tr.resolved_at), now)}</p>${head}</section>
   ${tr.status === 'done' ? `<section class="card">${bracket(br, user.id)}</section>` : ''}
   <a class="btn wide" href="/arena">${ic('login', 'flip')} Arena</a>` });
 }

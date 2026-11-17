@@ -24,7 +24,7 @@ def circle_fade(im, inner=0.62, outer=0.98):
 
 # Key art
 hero = Image.open(f'{SRC}/hero.jpg')
-webp(hero, 'hero', 720, 70)
+hero.convert('RGB').filter(ImageFilter.UnsharpMask(radius=0.8, percent=40, threshold=2)).save(f'{OUT}/hero.webp', 'WEBP', quality=84, method=6)  # źródło 720×1280 – bez skalowania
 # Logo z przezroczystym tłem: alfa = jasność, kolor „odmnożony”
 logo = Image.open(f'{SRC}/logo.jpg').convert('RGB')
 logo = logo.crop((60, 200, 1220, 520))
@@ -38,29 +38,42 @@ for y in range(H):
             rr, gg, bb = px[x, y]; k = 255 / max(al, 1)
             px[x, y] = (min(255, int(rr * k)), min(255, int(gg * k)), min(255, int(bb * k)))
 logo.putalpha(a)
-webp(logo, 'logo', 640, 74)
+webp(logo, 'logo', 1160, 82)
 logo.resize((1160 // 2, 320 // 2), Image.LANCZOS)  # sanity
 
 # Ikony / karty
-for n in ['ship']: webp(Image.open(f'{GEN}/{n}.jpg'), n, 512, 72)
-for n in ['cls_szturmowiec', 'cls_krazownik', 'cls_zwiadowca', 'cls_wsparcie']: webp(Image.open(f'{GEN}/{n}.jpg'), n, 400, 70)
-for i in range(1, 11): webp(Image.open(f'{GEN}/pl_{i}.jpg'), f'pl_{i}', 360, 68); webp(Image.open(f'{GEN}/cb_{i}.jpg'), f'cb_{i}', 400, 70)
-for n in ['ev_inwazja', 'ev_lupy', 'ev_happy']: webp(Image.open(f'{GEN}/{n}.jpg'), n, 720, 66)
-for n in ['b_mine', 'b_power', 'b_shipyard', 'b_lab']: webp(Image.open(f'{GEN}/{n}.jpg'), n, 320, 70)
-for n in ['p_zwiadowca', 'p_korsarz', 'p_krazownik', 'p_dreadnought', 'p_xeno']: webp(Image.open(f'{GEN}/{n}.jpg'), n, 320, 70)
+# v8: ostre grafiki na ekranach 2–3× – warianty szerokości do srcset (bez skalowania w górę), WebP q86 + lekkie wyostrzenie
+ART_W = [256, 384, 512, 768, 1024]
+def sharpen(im, w0):
+    k = w0 / im.width  # im.width = docelowa szerokość
+    return im.filter(ImageFilter.UnsharpMask(radius=0.8 if k < 1.5 else 1.1, percent=55 if k < 1.5 else 75, threshold=2))
+def multi(name, widths=ART_W, q=86, default=768):
+    src = Image.open(f'{GEN}/{name}.jpg').convert('RGB')
+    for w in widths:
+        assert w <= src.width, f'{name}: brak upscalingu ({w} > {src.width})'
+        im = src.resize((w, round(src.height * w / src.width)), Image.LANCZOS) if w < src.width else src.copy()
+        im = sharpen(im, src.width)
+        qq = q if w <= 512 else q - 6  # duże warianty: q80 (ostrość zostaje, plik ~30% mniejszy)
+        im.save(f'{OUT}/{name}-{w}.webp', 'WEBP', quality=qq, method=6)
+        if w == default: im.save(f'{OUT}/{name}.webp', 'WEBP', quality=qq, method=6)
+SQUARE = ['ship', 'boss', 'cls_szturmowiec', 'cls_krazownik', 'cls_zwiadowca', 'cls_wsparcie', 'b_mine', 'b_power', 'b_shipyard', 'b_lab',
+          'p_zwiadowca', 'p_korsarz', 'p_krazownik', 'p_dreadnought', 'p_xeno'] + [f'pl_{i}' for i in range(1, 11)] + [f'cb_{i}' for i in range(1, 11)]
+for n in SQUARE: multi(n)
+# tła 16:9 – pełna rozdzielczość źródła jako domyślna (CSS background), mniejszy wariant do srcset
+for n in ['ev_inwazja', 'ev_lupy', 'ev_happy', 'expedition_bg', 'battle_bg']: multi(n, [640, 1280], 82, 1280)
+multi('sector_bg', [576, 1152], 82, 1152)
 for n in ['r_metal', 'r_crystal', 'r_energy']:
     im = Image.open(f'{GEN}/{n}.jpg').crop((112, 112, 912, 912))
-    webp(circle_fade(im, 0.55, 1.0), n, 128, 80)
+    webp(circle_fade(im, 0.55, 1.0), n, 128, 84)
 # v7: sprite modułów specjalnych (4×3 komórki po 128 px, miękkie okrągłe krawędzie)
 sheet = Image.open(f'{GEN}/gear_sheet.jpg').convert('RGB'); cw, chh = sheet.width // 4, sheet.height // 3
-sprite = Image.new('RGBA', (4 * 128, 3 * 128), (0, 0, 0, 0))
+sprite = Image.new('RGBA', (4 * 256, 3 * 256), (0, 0, 0, 0))
 for i in range(12):
     cx, cy = i % 4, i // 4
-    cell = sheet.crop((cx * cw, cy * chh, (cx + 1) * cw, (cy + 1) * chh)).resize((128, 128), Image.LANCZOS)
-    sprite.paste(circle_fade(cell, 0.7, 1.0), (cx * 128, cy * 128))
-sprite.save(f'{OUT}/gear.webp', 'WEBP', quality=80, method=6)
-bb = Image.open(f'{GEN}/battle_bg.jpg'); bb = bb.crop((0, 80, bb.width, 652))
-webp(bb, 'battle_bg', 1100, 66)
+    cell = sheet.crop((cx * cw, cy * chh, (cx + 1) * cw, (cy + 1) * chh)).resize((256, 256), Image.LANCZOS)
+    sprite.paste(circle_fade(cell, 0.7, 1.0), (cx * 256, cy * 256))
+sprite.save(f'{OUT}/gear.webp', 'WEBP', quality=84, method=6)
+
 
 # Ikony PWA / favicon: planeta z pierścieniem z key artu + litera K z logo
 def app_icon(size):

@@ -152,6 +152,14 @@ const devHooks = [];
 const settledHooks = []; // powiadomienia o zakończonych budowach/ekspedycjach (etap 4)
 const onSettled = (u, done) => { for (const h of settledHooks) Promise.resolve(h(u, done)).catch((e) => console.error('settledHook', e.message)); }; // dodatkowe przewijanie czasu z modułów
 const wantsJson = (req) => (req.get('accept') || '').includes('application/json');
+// v8: nazwy z prototypu obiektu (constructor, __proto__, toString…) w ścieżce nie mogą trafić do wyszukań w słownikach gry – 404 zamiast 500.
+const PROTO_SEG = /\/(__\w+__|constructor|prototype|toString|toLocaleString|valueOf|hasOwnProperty|isPrototypeOf|propertyIsEnumerable)(\/|$)/;
+app.use((req, res, next) => {
+  if (!PROTO_SEG.test(req.path)) return next();
+  if (wantsJson(req)) return res.status(404).json({ ok: false, msg: 'Nie znaleziono.' });
+  res.status(404).send(V.notFound({ user: req.user, st: req.user && V.state(req.user, Date.now()) }));
+});
+
 function respond(req, res, { ok, msg, redirect, data = {} }) {
   if (wantsJson(req)) return res.status(ok ? 200 : 400).json({ ok, msg, ...data });
   setCookie(res, 'flash', JSON.stringify({ ok, msg }), 30);
@@ -359,8 +367,8 @@ for (const [path, q, back] of [['/kolonia/przyspiesz', 'bq', '/kolonia'], ['/sta
 }
 
 // ---------- bitwy ----------
-async function battleTargets(u, now) {
-  return db.all(`SELECT u.id, u.username, u.level, u.prestige, u.planet, u.s_hull, u.s_guns, u.s_shields, c.tag
+async function battleTargets(u, now, q = db) {
+  return q.all(`SELECT u.id, u.username, u.level, u.prestige, u.planet, u.s_hull, u.s_guns, u.s_shields, c.tag
     FROM users u LEFT JOIN corps c ON c.id = u.corp_id
     WHERE u.id != ? AND u.level >= ? AND u.protected_until < ? AND (u.corp_id IS NULL OR u.corp_id != ?)
     ORDER BY ABS(u.level - ?) ASC, u.id DESC LIMIT 10`, [u.id, u.level - 2, now, u.corp_id ?? -1, u.level]);
@@ -459,6 +467,29 @@ app.post('/bitwa/gracz/:id', auth, action('/bitwa', async (t, u, now, req) => {
     redirect: `/bitwa/${battleId}`, data: { battleId, won: sim.aWon, reward: rw, rounds: sim.rounds } };
 }));
 
+// v8: Holo-rywal – gdy na Twoim poziomie brakuje prawdziwych celów PvP (np. jesteś liderem serwera),
+// misje „Zaatakuj gracza” byłyby niewykonalne. Symulacja liczy się do misji/sezonu, ale nie daje łupu ani punktów PvP.
+const HOLO_MIN_TARGETS = 3;
+app.post('/bitwa/holo', auth, action('/bitwa', async (t, u, now) => {
+  if ((await battleTargets(u, now, t)).length >= HOLO_MIN_TARGETS) fail('Masz w zasięgu prawdziwych rywali – symulator jest dostępny tylko, gdy ich brakuje.');
+  const me = preBattle(u, now, R.PVP_ENERGY);
+  const s = R.shipStats(u);
+  const holo = { ...s, name: `Holo-${u.username}`, maxHp: Math.round(s.maxHp * 0.9), atk: Math.round(s.atk * 0.85), def: Math.round(s.def * 0.85),
+    crit: 0.05, dodge: 0.05, shield: 0, double: 0, opener: 0, regen: 0, lastStand: 0, counter: 0, leech: 0, thorns: 0 };
+  const sim = R.simulate(me, { ...holo, hp: holo.maxHp });
+  const reward = { xp: xpGain(u, sim.aWon ? 8 + 3 * u.level : 2), metal: 0, crystal: 0 };
+  const lv = R.addXp(u.level, u.xp, reward.xp);
+  const hp = lv.levelsGained ? R.shipStats({ ...u, level: lv.level }).maxHp : Math.max(1, sim.aHp);
+  await t.run('UPDATE users SET energy = energy - ?, level = ?, xp = ?, hp = ?, hp_at = ?, last_battle_at = ? WHERE id = ?',
+    [me.cost, lv.level, lv.xp, hp, now, now, u.id]);
+  const rw = { ...reward, levelUp: lv.levelsGained ? lv.level : 0, holo: 1 };
+  const battleId = await t.insert(`INSERT INTO battles (created_at, kind, attacker_id, defender_id, enemy_name, attacker_won, log, reward)
+    VALUES (?, 'pvp', ?, NULL, ?, ?, ?, ?)`, [now, u.id, holo.name, sim.aWon ? 1 : 0, JSON.stringify(sim.log), JSON.stringify(rw)]);
+  await G.track(t, u.id, now, { pvp: 1, win: sim.aWon ? 1 : 0, energy: me.cost });
+  return { msg: sim.aWon ? `Symulacja wygrana! +${reward.xp} XP` : 'Holo-rywal okazał się lepszy. Spróbuj ponownie.',
+    redirect: `/bitwa/${battleId}`, data: { battleId, won: sim.aWon, reward: rw, rounds: sim.rounds } };
+}));
+
 // ---------- ranking ----------
 async function rankingData(tab, userId) {
   if (tab === 'korporacje') {
@@ -543,7 +574,7 @@ if (process.env.DEV_HOOKS === '1' && !process.env.RENDER) {
     return { msg: 'ok' };
   }));
   app.post('/api/dev/budynek', auth, action('/', async (t, u, now, req) => {
-    const d = R.BUILDINGS[req.body.b] || fail('Nieznany budynek.');
+    const d = (Object.hasOwn(R.BUILDINGS, String(req.body.b)) && R.BUILDINGS[req.body.b]) || fail('Nieznany budynek.');
     await t.run(`UPDATE users SET ${d.col} = ? WHERE id = ?`, [Math.max(1, Math.min(R.MAX_LEVEL_BUILDING, Number(req.body.level) || 1)), u.id]);
     return { msg: 'ok' };
   }));
@@ -586,7 +617,7 @@ app.use((req, res) => {
 app.use((err, req, res, _next) => {
   console.error(err);
   if (wantsJson(req)) return res.status(500).json({ ok: false, msg: 'Błąd serwera.' });
-  res.status(500).send('Błąd serwera – awaria reaktora. Spróbuj ponownie.');
+  res.status(500).send('<!doctype html><html lang="pl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Błąd serwera – Kolonie</title><link rel="stylesheet" href="/style.css"><main><section class="card center"><h2>Awaria reaktora</h2><p class="muted">Błąd serwera. Spróbuj ponownie za chwilę.</p><a class="btn primary wide" href="/kolonia">Wróć do kolonii</a></section></main></html>');
 });
 
 // sprzątanie wygasłych sesji

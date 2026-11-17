@@ -985,6 +985,26 @@ if (TOKEN) {
   check(statuses.includes(429) && statuses.indexOf(429) >= 88, 'Limit żądań: 429 po przekroczeniu 90 POST/min z jednego IP', `pierwsze 429 przy #${statuses.indexOf(429) + 1}`);
 }
 
+// ---------- v8: audyt – grafiki srcset, ochrona słowników, Holo-rywal, odmiana ----------
+{
+  r = await A.get('/statek', false);
+  const html = typeof r.data === 'string' ? r.data : '';
+  check(/srcset="\/img\/(cls_\w+|ship)-256\.webp\?v=\d+ 256w, [^"]*-1024\.webp\?v=\d+ 1024w"/.test(html), 'Grafika statku ma srcset 256–1024 w');
+  const big = await fetch(`${BASE}/img/cb_1-1024.webp`);
+  check(big.status === 200 && Number(big.headers.get('content-length') || 1) > 0, 'Wariant 1024 px grafiki bossa dostępny');
+  for (const path of ['/statek/klasa/constructor', '/badania/start/__proto__', '/badania/start/toString']) {
+    r = await A.post(path);
+    check(r.status === 404 && r.data.ok === false, `Nazwa z prototypu w ścieżce → 404, nie 500 (${path})`, r.status);
+  }
+  r = await A.get('/kampania/__proto__', false);
+  check(r.status === 404, 'GET z nazwą z prototypu → 404', r.status);
+  r = await A.get('/bitwa', false);
+  const hasHolo = typeof r.data === 'string' && r.data.includes('/bitwa/holo');
+  r = await A.post('/bitwa/holo');
+  check(r.status < 500 && (hasHolo ? (r.data.ok || /energii|HP|napraw/i.test(r.data.msg)) : /prawdziwych rywali/.test(r.data.msg)),
+    `Holo-rywal: ${hasHolo ? 'dostępny przy braku celów PvP' : 'zablokowany, gdy są prawdziwi rywale'}`, r.data.msg);
+}
+
 // ---------- sprzątanie: usunięcie kont testowych z tej serii ----------
 r = await new Client('anon').postJson('/api/admin/sprzataj', {});
 check(r.status === 403, 'Sprzątanie bez tokenu odrzucone');

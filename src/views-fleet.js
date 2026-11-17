@@ -22,7 +22,7 @@ export function classes({ user, st, flash, cs, now }) {
       : cs.cdLeft ? `<button class="btn wide" disabled>${ic('clock')} za ${dur(cs.cdLeft)}</button>`
       : `<form method="post" action="/statek/klasa/${id}"><button class="btn ${cs.first ? 'cta' : 'primary'} wide">${cs.first ? 'Wybierz' : `Przebuduj · 💎${fmt(cs.cost.crystal)}`}</button></form>`;
     return `<article class="cls-card${cur ? ' cur' : ''}">
-      <div class="cls-art">${img(`cls_${id}`, c.name, '', 400)}<span class="cls-role">${ic(c.icon)} ${c.role}</span></div>
+      <div class="cls-art">${img(`cls_${id}`, c.name, '', 400, false, '(min-width:700px) 262px, calc(100vw - 28px)')}<span class="cls-role">${ic(c.icon)} ${c.role}</span></div>
       <div class="cls-body"><h3>${c.name}</h3><p class="small muted">${c.desc}</p><div class="mchips">${modChips(c.m)}</div>
       <div class="cls-stats"><span>${ic('heart', 'hp-ic')}${s.maxHp}</span><span>${pi('guns', 18, 'inl')}${s.atk}</span><span>${pi('shields', 18, 'inl')}${s.def}</span><span>${pi('power', 18, 'inl')}${R.power({ ...user, ship_class: id })}</span></div>
       ${btn}</div></article>`;

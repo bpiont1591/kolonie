@@ -1,7 +1,7 @@
 // Widoki korporacji (etap 3): przegląd, skarbiec, ulepszenia, wojna o sektor, boss rajdowy.
 import * as R from './rules.js';
 import * as C from './corp.js';
-import { layout, esc, emo, fmt, resIcon, costHtml, rewardChips, ago, hpBar, img, ttl, pBadge } from './views.js';
+import { layout, esc, emo, fmt, resIcon, costHtml, rewardChips, ago, hpBar, img, ttl, pBadge, plural } from './views.js';
 import { ic, pi, lvBadge, V } from './icons.js';
 import { dur, msToWeekEnd } from './time.js';
 
@@ -109,7 +109,7 @@ export function war({ user, st, flash, w, now }) {
     <div class="sector" style="--bg:url('/img/sector_bg.webp?v=${V}')"><svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${lines}</svg>${planets}</div>
     ${mgr ? '<p class="small center muted">Dotknij planety, aby ustawić ją jako cel korporacji.</p>' : user.corp_id ? `<p class="small center muted">Cel korporacji: <b>${esc(P[target]?.name || '')}</b> (ustala przywódca lub oficer)</p>` : ''}
   </section>
-  ${w.prev ? `<section class="callout rare">${pi('trophy', 48)}<span class="grow"><b>Zwycięzca zeszłego tygodnia</b><br><small>[${esc(w.prev.tag)}] ${esc(w.prev.name)} · ${w.prev.planets} planet · +${C.WAR_WIN_BONUS * 100}% wydobycia</small></span></section>` : ''}
+  ${w.prev ? `<section class="callout rare">${pi('trophy', 48)}<span class="grow"><b>Zwycięzca zeszłego tygodnia</b><br><small>[${esc(w.prev.tag)}] ${esc(w.prev.name)} · ${w.prev.planets} ${plural(w.prev.planets, 'planeta', 'planety', 'planet')} · +${C.WAR_WIN_BONUS * 100}% wydobycia</small></span></section>` : ''}
   <section class="card"><h3 class="with-ic">${pi('trophy', 30)} Klasyfikacja tygodnia</h3>${stand}</section>
   ${user.corp_id ? `<section class="card"><h3 class="with-ic">${ic('users', 'acc')} Wkład członków</h3>${w.contrib.map((c) => `<div class="item"><span class="grow">${esc(c.username)}</span><b class="pts">${c.points} pkt</b></div>`).join('') || '<p class="muted">Jeszcze nikt nie zdobył punktów. Wygrywajcie bitwy!</p>'}</section>` : ''}` });
 }
@@ -140,7 +140,7 @@ export function boss({ user, st, flash, b, hits, now }) {
     </section>`;
   }
   const rank = hits.length ? hits.map((h, i) => `<div class="item rank${h.user_id === user.id ? ' me' : ''}"><span class="pos">${i + 1}</span>
-    <span class="grow"><b>${esc(h.username)}</b> <small class="muted">· ${h.attacks} ataków</small><div class="prog"><i style="width:${Math.round((h.damage / total) * 100)}%"></i></div></span>
+    <span class="grow"><b>${esc(h.username)}</b> <small class="muted">· ${h.attacks} ${plural(h.attacks, 'atak', 'ataki', 'ataków')}</small><div class="prog"><i style="width:${Math.round((h.damage / total) * 100)}%"></i></div></span>
     <b class="pts">${fmt(h.damage)}</b></div>`).join('') : '<p class="muted">Brak ataków.</p>';
   return layout({ title: 'Boss rajdowy', user, st, flash, active: 'korporacja', body: `
   ${nav('boss')}

@@ -28,7 +28,7 @@ export default function registerChat({ app, db, auth, page, wantsJson, respond }
     <section class="chat-head card">${pi('chat', 64, 'float')}<div class="grow"><h2>Łączność podprzestrzenna</h2><small class="muted">${k === 'k' ? 'Kanał tylko dla Twojej korporacji' : 'Kanał ogólny – piszą wszyscy komandorzy'}</small></div></section>
     <div class="seg">${`<a href="/czat" class="${k === 'g' ? 'on' : ''}">${pi('chat', 22, 'inl')}Globalny</a>`}${corpTab}</div>
     <section id="chat" class="card chat" data-kanal="${k}" data-me="${u.id}" data-last="${last}">
-      <ol class="msgs" data-msgs aria-live="polite">${msgs.length ? msgs.map(li).join('') : '<li class="empty muted">Cisza w eterze. Napisz pierwszą wiadomość!</li>'}</ol>
+      <ol class="msgs" data-msgs aria-live="polite" tabindex="0" aria-label="Wiadomości czatu">${msgs.length ? msgs.map(li).join('') : '<li class="empty muted">Cisza w eterze. Napisz pierwszą wiadomość!</li>'}</ol>
       <p class="flash err" data-err hidden></p>
       <form method="post" action="/czat/wyslij" class="chat-form" data-keep autocomplete="off">
         <input type="hidden" name="kanal" value="${k}">
@@ -37,7 +37,7 @@ export default function registerChat({ app, db, auth, page, wantsJson, respond }
       </form>
       <small class="muted chat-rules"><span data-count>0/${MAX_LEN}</span> · maks. ${MAX_LEN} znaków, bez spamu i wulgaryzmów</small>
     </section>`;
-    return layout({ title: 'Czat', user: u, st, flash: req.flash, active: 'czat', body, head: '<script src="/chat.js?v=26" defer></script>' });
+    return layout({ title: 'Czat', user: u, st, flash: req.flash, active: 'czat', body, head: '<script src="/chat.js?v=27" defer></script>' });
   }));
 
   app.get('/api/czat', auth, async (req, res, next) => {

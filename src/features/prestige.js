@@ -28,7 +28,7 @@ export default function registerPrestige({ app, auth, page, action, dev }) {
   }));
 
   app.post('/odrodzenie/ulepsz/:id', auth, action('/odrodzenie', async (t, u, now, req) => {
-    const p = PS.PERKS[req.params.id] || fail('Nieznane ulepszenie.');
+    const p = (Object.hasOwn(PS.PERKS, req.params.id) && PS.PERKS[req.params.id]) || fail('Nieznane ulepszenie.');
     const lv = PS.perkLevels(u), cur = lv[p.id] || 0;
     if (cur >= p.max) fail(`${p.name} ma już maksymalny poziom.`);
     const cost = PS.perkCost(cur);
