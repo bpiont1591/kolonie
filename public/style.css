@@ -123,7 +123,7 @@ body.landing main{max-width:none;padding:0 0 30px}
 body.landing main>section:not(.hero-full):not(.battle-teaser),body.landing .footer,body.landing main>.flash{width:min(560px,calc(100% - 24px));margin-left:auto;margin-right:auto}
 body.landing main>.flash{position:fixed;top:10px;left:0;right:0;z-index:20}
 .hero-full{position:relative;min-height:100svh;display:flex;align-items:flex-end;justify-content:center;overflow:hidden;text-align:center}
-.hero-bg{position:absolute;inset:0;background:url(/img/hero.webp?v=20) center 60%/cover no-repeat;transform:scale(1.04);animation:heroZoom 24s ease-in-out infinite alternate}
+.hero-bg{position:absolute;inset:0;background:url(/img/hero.webp?v=22) center 60%/cover no-repeat;transform:scale(1.04);animation:heroZoom 24s ease-in-out infinite alternate}
 @keyframes heroZoom{to{transform:scale(1.12) translateY(-1.5%)}}
 .hero-full::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(5,9,24,.55) 0%,rgba(5,9,24,.05) 30%,rgba(5,9,24,.35) 55%,rgba(5,9,24,.96) 88%,var(--bg) 100%)}
 .hero-inner{position:relative;z-index:1;padding:0 18px 54px;max-width:620px}
@@ -148,7 +148,7 @@ body.landing main>.flash{position:fixed;top:10px;left:0;right:0;z-index:20}
 .feature img{width:104px;height:104px;border-radius:14px;object-fit:cover;border:1px solid rgba(62,230,255,.3)}
 .feature h3{margin:0 0 4px;color:#fff}.feature p{margin:0;font-size:.9rem;line-height:1.45;color:#c4cdee}
 .battle-teaser{position:relative;margin:34px 0;padding:44px 0 30px;overflow:hidden}
-.bt-bg{position:absolute;inset:0;background:linear-gradient(180deg,var(--bg),rgba(5,9,24,.35) 25%,rgba(5,9,24,.45) 70%,var(--bg)),url(/img/battle_bg.webp?v=20) center/cover}
+.bt-bg{position:absolute;inset:0;background:linear-gradient(180deg,var(--bg),rgba(5,9,24,.35) 25%,rgba(5,9,24,.45) 70%,var(--bg)),url(/img/battle_bg.webp?v=22) center/cover}
 .bt-inner{position:relative;max-width:620px;margin:0 auto;padding:0 14px;text-align:center}
 .bt-inner p{color:#d6e1ff;text-shadow:0 2px 8px #000;line-height:1.5}
 .pirates{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;padding:8px 2px 4px;margin-top:16px;scrollbar-width:none}
@@ -663,3 +663,12 @@ a.who{color:var(--mut);text-decoration:none}
 .ev-body h4{margin:4px 0 0}
 .ev-top{list-style:none;margin:0;padding:0;display:grid;gap:4px}.ev-top li{display:grid;grid-template-columns:24px 1fr auto;gap:6px;padding:5px 8px;border-radius:9px;background:rgba(255,255,255,.04)}.ev-top li.me{background:rgba(62,230,255,.12);border:1px solid rgba(62,230,255,.4)}
 .ev-up .ev-thumb{width:64px;height:40px;object-fit:cover;border-radius:8px;flex:none}
+
+/* ---------- v7 etap 1: drzewko 10 poziomów ---------- */
+.tnav{margin:0 0 10px;display:grid!important;grid-template-columns:repeat(4,1fr);gap:4px}.tnav a{white-space:nowrap;justify-content:center}@media(max-width:520px){.tnav{grid-template-columns:repeat(2,1fr)}}
+.tnode.compact{padding:7px 10px;align-items:center}.tnode.compact .tier{width:26px;height:26px}.tnode.compact b{font-size:.85rem}.tnode.compact .tact{margin-top:0}
+.tnode.ms{border-color:rgba(255,190,90,.55);background:linear-gradient(135deg,rgba(255,170,60,.12),rgba(8,14,34,.6))}
+.tnode.ms .tier{color:#ffc44d;border-color:rgba(255,190,90,.7);box-shadow:0 0 10px rgba(255,170,60,.35)}
+.tnode.ms.done{border-color:rgba(61,255,168,.55)}
+.ms-ic{width:15px;height:15px;color:#ffc44d;margin-right:4px;vertical-align:-.15em}
+.tbranch{scroll-margin-top:70px}

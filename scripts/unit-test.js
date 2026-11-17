@@ -180,17 +180,46 @@ t('Klasy statków: modyfikatory statystyk i walka', () => {
 t('Drzewko technologii: punkty, kolejność, reset', () => {
   const u = { level: 6, b_lab: 3, tech: '', rq_id: null };
   assert.equal(PR.rpTotal(u), 9);
-  assert.equal(PR.TECH.length, 16);
+  assert.equal(PR.TECH.length, 40);
   assert.match(PR.canResearch(u, PR.TECH_BY_ID.b2), /Najpierw/);
   assert.equal(PR.canResearch(u, PR.TECH_BY_ID.b1), null);
   assert.match(PR.canResearch({ ...u, rq_id: 'p1' }, PR.TECH_BY_ID.b1), /jedno naraz/);
   const v = { ...u, tech: 'b1,b2,b3', rq_id: 'p1' };
-  assert.equal(PR.rpSpent(v), 7); assert.equal(PR.rpFree(v), 2);
-  assert.match(PR.canResearch({ ...v, rq_id: null }, PR.TECH_BY_ID.b4), /punktów/);
+  assert.equal(PR.rpSpent(v), 4); assert.equal(PR.rpFree(v), 5);
+  assert.match(PR.canResearch({ ...v, level: 1, b_lab: 2, rq_id: null }, PR.TECH_BY_ID.b4), /punktów/);
   assert.ok(Math.abs(PR.mods(v).atk - 0.13) < 1e-9 && PR.mods(v).crit === 0.04);
   assert.equal(PR.techList({ tech: 'b1,zly,p1' }).join(), 'b1,p1');
   assert.equal(PR.resetCost(7).crystal, 700); assert.equal(PR.resetCost(0).crystal, 100);
   assert.ok(R.prodMult({ ...u, tech: 'l1' }) > R.prodMult(u) || true);
+});
+t('Drzewko v7: 10 poziomów, wymagania, kamienie milowe, osiągalność ~50+', () => {
+  for (const b of PR.BRANCHES) { const ns = PR.TECH.filter((n) => n.branch === b.id); assert.equal(ns.length, 10); assert.deepEqual(ns.filter((n) => n.milestone).map((n) => n.tier), [5, 10]); }
+  const all = PR.TECH.map((n) => n.id).join(',');
+  const rpAll = PR.TECH.reduce((a, n) => a + PR.TIER_RP[n.tier], 0);
+  assert.equal(rpAll, 88);
+  assert.ok(PR.rpTotal({ level: 40, b_lab: 14 }) < rpAll && PR.rpTotal({ level: 53, b_lab: 19 }) >= rpAll);
+  const four = { level: 60, b_lab: 30, tech: 'b1,b2,b3,b4', rq_id: null };
+  assert.match(PR.canResearch({ ...four, level: 11 }, PR.TECH_BY_ID.b5), /poziomu gracza 12/);
+  assert.match(PR.canResearch({ ...four, b_lab: 4 }, PR.TECH_BY_ID.b5), /laboratorium na poziomie 5/);
+  assert.equal(PR.canResearch(four, PR.TECH_BY_ID.b5), null);
+  for (let t = 2; t <= 10; t++) { const a = PR.researchCost({ tier: t - 1 }), b = PR.researchCost({ tier: t }); assert.ok(b.metal > a.metal && PR.TIER_MIN[t] > PR.TIER_MIN[t - 1]); }
+  const m = PR.mods({ tech: all });
+  assert.ok(m.double === 0.12 && m.opener === 0.6 && m.regen === 0.03 && m.lastStand === 1 && m.counter === 0.5 && m.expSpeed === 0.15 && m.buildSpeed === 0.2 && m.energySave === 0.25);
+  assert.equal(R.battleEnergy({ tech: all }, 20), 15); assert.equal(R.battleEnergy({ tech: '' }, 20), 20);
+  assert.ok(R.buildTime(10, { tech: all }) < R.buildTime(10) && R.expeditionMs({ h: 1 }, { tech: all }) === 3060000);
+  // efekty w walce: ostatni bastion, regeneracja, podwójna salwa, kontra – i stara liczba losowań bez nich
+  const base = { name: 'A', maxHp: 100, hp: 100, atk: 30, def: 0 }, foe = { name: 'B', maxHp: 1000, hp: 1000, atk: 500, def: 0 };
+  const ls = R.simulate({ ...base, lastStand: 1 }, foe, () => 0.5);
+  assert.ok(ls.log.some((l) => /OSTATNI BASTION/.test(l.t)));
+  const rg = R.simulate({ ...base, regen: 0.05 }, { ...foe, atk: 20 }, () => 0.5);
+  assert.ok(rg.log.some((l) => /regeneracja bojowa/.test(l.t)));
+  const db = R.simulate({ ...base, double: 1, opener: 0.6 }, { ...foe, atk: 1 }, () => 0.5);
+  assert.ok(db.log.some((l) => /PODWÓJNA SALWA/.test(l.t)) && db.log.some((l) => /SALWA OTWIERAJĄCA/.test(l.t)));
+  let k = 0; const seq = () => [0.01, 0.5, 0.5, 0.5][k++ % 4];
+  const ct = R.simulate({ ...base, atk: 1 }, { ...foe, atk: 1, hp: 50, maxHp: 50, counter: 1 }, seq);
+  assert.ok(ct.log.some((l) => /KONTRA/.test(l.t)));
+  let n1 = 0; R.simulate({ ...base }, { ...foe, atk: 5 }, () => { n1++; return 0.5; });
+  assert.equal(n1, 12 * 2 * 4); // 12 rund × 2 strzały × 4 losowania – bez kamieni milowych jak w v6
 });
 t('Kampania: dane, odblokowanie, gwiazdki, nagrody, trofea', () => {
   assert.equal(CA.CHAPTERS.length, 5);

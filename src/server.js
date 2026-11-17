@@ -317,7 +317,7 @@ app.post('/kolonia/ulepsz/:b', auth, action('/kolonia', async (t, u, now, req) =
   const m = materialize(u, now);
   const c = R.upgradeCost(def, lvl);
   if (!payable(m, c)) fail(`Brakuje surowców. Koszt: ${costText(c)}`);
-  const secs = R.buildTime(lvl);
+  const secs = R.buildTime(lvl, u);
   await t.run(`UPDATE users SET metal = ?, crystal = ?, energy = ?, collected_at = ?, hp = ?, hp_at = ?, bq_id = ?, bq_until = ? WHERE id = ?`,
     [m.metal - c.metal, m.crystal - c.crystal, m.energy - c.energy, now, m.hp, now, req.params.b, now + secs * 1000, u.id]);
   await G.track(t, u.id, now, { build: 1, upgrade: 1, metal: m.collected.metal });
@@ -334,7 +334,7 @@ app.post('/statek/ulepsz/:m', auth, action('/statek', async (t, u, now, req) => 
   if (u.mq_id) fail(`W stoczni trwają już prace: ${R.MODULES[u.mq_id]?.name}. Poczekaj albo przyspiesz.`);
   const c = R.upgradeCost(def, lvl);
   if (!payable(u, c)) fail(`Brakuje surowców w magazynie. Koszt: ${costText(c)}`);
-  const secs = R.moduleTime(lvl);
+  const secs = R.moduleTime(lvl, u);
   await t.run('UPDATE users SET metal = metal - ?, crystal = crystal - ?, energy = energy - ?, mq_id = ?, mq_until = ? WHERE id = ?',
     [c.metal, c.crystal, c.energy, req.params.m, now + secs * 1000, u.id]);
   await G.track(t, u.id, now, { module: 1, upgrade: 1 });
@@ -388,8 +388,9 @@ function preBattle(u, now, energyCost) {
   const hp = R.currentHp(u, now);
   if (now - u.last_battle_at < R.BATTLE_COOLDOWN_MS) fail('Działa się chłodzą – odczekaj kilka sekund.');
   if (hp < ship.maxHp * R.MIN_HP_RATIO) fail(`Statek zbyt uszkodzony (${hp}/${ship.maxHp} HP). Poczekaj na naprawę.`);
-  if (u.energy < energyCost) fail(`Za mało energii w magazynie (potrzeba ⚡${energyCost}). Zbierz surowce.`);
-  return { name: u.username, ...ship, hp };
+  const cost = R.battleEnergy(u, energyCost); // „Mistrz floty” obniża koszt energii
+  if (u.energy < cost) fail(`Za mało energii w magazynie (potrzeba ⚡${cost}). Zbierz surowce.`);
+  return { name: u.username, ...ship, hp, cost };
 }
 function xpGain(u, base) { return Math.round(base * (1 + (u._xpBonus ?? (u.corp_id ? R.CORP_XP_BONUS : 0)) + mods(u).xp)); }
 
@@ -407,11 +408,11 @@ app.post('/bitwa/piraci/:tier', auth, action('/bitwa', async (t, u, now, req) =>
   const hp = lv.levelsGained ? R.shipStats({ ...u, level: lv.level }).maxHp : Math.max(1, sim.aHp);
   await t.run(`UPDATE users SET energy = energy - ?, metal = metal + ?, crystal = crystal + ?, level = ?, xp = ?, hp = ?, hp_at = ?,
       last_battle_at = ?, pve_wins = pve_wins + ? WHERE id = ?`,
-    [tier.energy, reward.metal, reward.crystal, lv.level, lv.xp, hp, now, now, sim.aWon ? 1 : 0, u.id]);
+    [me.cost, reward.metal, reward.crystal, lv.level, lv.xp, hp, now, now, sim.aWon ? 1 : 0, u.id]);
   const rw = { ...reward, tier: tier.id, levelUp: lv.levelsGained ? lv.level : 0 };
   const battleId = await t.insert(`INSERT INTO battles (created_at, kind, attacker_id, defender_id, enemy_name, attacker_won, log, reward)
     VALUES (?, 'pve', ?, NULL, ?, ?, ?, ?)`, [now, u.id, tier.name, sim.aWon ? 1 : 0, JSON.stringify(sim.log), JSON.stringify(rw)]);
-  await G.track(t, u.id, now, { pve: 1, win: sim.aWon ? 1 : 0, energy: tier.energy });
+  await G.track(t, u.id, now, { pve: 1, win: sim.aWon ? 1 : 0, energy: me.cost });
   if (sim.aWon) await G.warPoints(t, u, now, C.WAR_POINTS.pve);
   if (sim.aWon) await EVF.contribute(t, u, now, EV_POINTS.pirate);
   return { msg: sim.aWon ? `Zwycięstwo! +${reward.xp} XP, 🔩${reward.metal} 💎${reward.crystal}` : 'Porażka – piraci okazali się silniejsi.',
@@ -439,14 +440,14 @@ app.post('/bitwa/gracz/:id', auth, action('/bitwa', async (t, u, now, req) => {
   const hp = lv.levelsGained ? R.shipStats({ ...u, level: lv.level }).maxHp : Math.max(1, sim.aHp);
   await t.run(`UPDATE users SET energy = energy - ?, metal = metal + ?, crystal = crystal + ?, level = ?, xp = ?, hp = ?, hp_at = ?,
       last_battle_at = ?, pvp_wins = pvp_wins + ?, pvp_losses = pvp_losses + ?, pvp_points = CASE WHEN pvp_points + ? > 0 THEN pvp_points + ? ELSE 0 END WHERE id = ?`,
-    [R.PVP_ENERGY, reward.metal, reward.crystal, lv.level, lv.xp, hp, now, now, sim.aWon ? 1 : 0, sim.aWon ? 0 : 1, sim.aWon ? 10 : -5, sim.aWon ? 10 : -5, u.id]);
+    [me.cost, reward.metal, reward.crystal, lv.level, lv.xp, hp, now, now, sim.aWon ? 1 : 0, sim.aWon ? 0 : 1, sim.aWon ? 10 : -5, sim.aWon ? 10 : -5, u.id]);
   await t.run(`UPDATE users SET metal = metal - ?, crystal = crystal - ?, protected_until = ?,
       pvp_wins = pvp_wins + ?, pvp_losses = pvp_losses + ?, pvp_points = CASE WHEN pvp_points + ? > 0 THEN pvp_points + ? ELSE 0 END WHERE id = ?`,
     [reward.metal, reward.crystal, now + R.PVP_SHIELD_MS, sim.aWon ? 0 : 1, sim.aWon ? 1 : 0, sim.aWon ? -5 : 5, sim.aWon ? -5 : 5, d.id]);
   const rw = { ...reward, levelUp: lv.levelsGained ? lv.level : 0 };
   const battleId = await t.insert(`INSERT INTO battles (created_at, kind, attacker_id, defender_id, enemy_name, attacker_won, log, reward)
     VALUES (?, 'pvp', ?, ?, ?, ?, ?, ?)`, [now, u.id, d.id, d.username, sim.aWon ? 1 : 0, JSON.stringify(sim.log), JSON.stringify(rw)]);
-  await G.track(t, u.id, now, { pvp: 1, win: sim.aWon ? 1 : 0, energy: R.PVP_ENERGY });
+  await G.track(t, u.id, now, { pvp: 1, win: sim.aWon ? 1 : 0, energy: me.cost });
   if (sim.aWon) await G.warPoints(t, u, now, C.WAR_POINTS.pvp);
   if (sim.aWon) await EVF.contribute(t, u, now, EV_POINTS.pvp);
   fire(() => N.send(d.id, sim.aWon
@@ -530,6 +531,11 @@ if (process.env.DEV_HOOKS === '1' && !process.env.RENDER) {
   }));
   app.post('/api/dev/poziom', auth, action('/', async (t, u, now, req) => {
     await t.run('UPDATE users SET level = ?, xp = 0 WHERE id = ?', [Math.max(1, Math.min(50, Number(req.body.level) || 1)), u.id]);
+    return { msg: 'ok' };
+  }));
+  app.post('/api/dev/budynek', auth, action('/', async (t, u, now, req) => {
+    const d = R.BUILDINGS[req.body.b] || fail('Nieznany budynek.');
+    await t.run(`UPDATE users SET ${d.col} = ? WHERE id = ?`, [Math.max(1, Math.min(R.MAX_LEVEL_BUILDING, Number(req.body.level) || 1)), u.id]);
     return { msg: 'ok' };
   }));
   app.post('/api/dev/surowce', auth, action('/', async (t, u) => {

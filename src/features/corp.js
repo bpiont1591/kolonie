@@ -201,7 +201,7 @@ export default function registerCorp({ app, db, auth, page, action, payable, cos
     const hit = C.bossHit(me.atk, R.labBonus(u));
     const dmg = Math.min(b.hp, hit.dmg);
     const hp = Math.max(1, Math.round(me.hp - hit.counter * me.maxHp));
-    await t.run('UPDATE users SET energy = energy - ?, hp = ?, hp_at = ?, last_battle_at = ? WHERE id = ?', [C.BOSS.energy, hp, now, now, u.id]);
+    await t.run('UPDATE users SET energy = energy - ?, hp = ?, hp_at = ?, last_battle_at = ? WHERE id = ?', [me.cost, hp, now, now, u.id]);
     await t.run(`INSERT INTO boss_hits (boss_id, user_id, damage, attacks) VALUES (?, ?, ?, 1)
       ON CONFLICT (boss_id, user_id) DO UPDATE SET damage = boss_hits.damage + excluded.damage, attacks = boss_hits.attacks + 1`, [b.id, u.id, dmg]);
     const left = b.hp - dmg;
@@ -210,7 +210,7 @@ export default function registerCorp({ app, db, auth, page, action, payable, cos
       await G.corpLog(t, u.corp_id, now, `${u.username} zadaje ostateczny cios! ${C.BOSS.name} zniszczona.`);
     } else await t.run('UPDATE bosses SET hp = hp - ? WHERE id = ?', [dmg, b.id]);
     await G.warPoints(t, u, now, C.WAR_POINTS.boss);
-    await G.track(t, u.id, now, { boss: 1, energy: C.BOSS.energy });
+    await G.track(t, u.id, now, { boss: 1, energy: me.cost });
     return { msg: `${hit.crit ? 'Trafienie krytyczne! ' : ''}Zadano ${dmg} obrażeń. Kontratak: −${me.hp - hp} HP.${left <= 0 ? ' Boss zniszczony!' : ''}`,
       data: { damage: dmg, crit: hit.crit, bossHp: Math.max(0, left), killed: left <= 0 } };
   }));

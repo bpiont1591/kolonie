@@ -355,8 +355,8 @@ export function colony({ user, st, flash, now = Date.now() }) {
     }[id];
     return upgradeCard({ action: `/kolonia/ulepsz/${id}`, icon: img('b_' + id, b.name, 'thumb', 64), name: b.name, desc: b.desc,
       lvl, max, effect: effect(lvl), next: lvl < max ? effect(lvl + 1) : '', cost: R.upgradeCost(b, lvl), have,
-      block: lvl >= max ? { label: 'MAX', why: 'Osiągnięto maksymalny poziom' } : null, now, secs: R.buildTime(lvl), rushAction: '/kolonia/przyspiesz', tut: id === 'mine' ? 'build' : '',
-      building: user.bq_id === id ? { until: user.bq_until, total: R.buildTime(lvl) } : null, busy: user.bq_id && user.bq_id !== id ? R.BUILDINGS[user.bq_id]?.name : null });
+      block: lvl >= max ? { label: 'MAX', why: 'Osiągnięto maksymalny poziom' } : null, now, secs: R.buildTime(lvl, user), rushAction: '/kolonia/przyspiesz', tut: id === 'mine' ? 'build' : '',
+      building: user.bq_id === id ? { until: user.bq_until, total: R.buildTime(lvl, user) } : null, busy: user.bq_id && user.bq_id !== id ? R.BUILDINGS[user.bq_id]?.name : null });
   }).join('');
   return layout({ title: 'Kolonia', user, st, flash, active: 'kolonia', body: `
   <section class="card colony banner" style="--bg:url('/img/hero.webp?v=${V}')">
@@ -398,8 +398,8 @@ export function ship({ user, st, flash, now = Date.now() }) {
     const capped = lvl >= cap;
     return upgradeCard({ action: `/statek/ulepsz/${id}`, icon: `<span class="mod-ic">${pi(id, 64, '', m.name)}</span>`, name: m.name, desc: m.desc,
       lvl, max: cap, effect: modEff[id](0), next: capped ? '' : modEff[id](1), cost: R.upgradeCost(m, lvl), have: st.stock,
-      block: capped && user.mq_id !== id ? { label: 'Limit', why: 'Ulepsz stocznię, by podnieść limit' } : null, now, secs: R.moduleTime(lvl), rushAction: '/statek/przyspiesz', tut: id === 'guns' ? 'module' : '',
-      building: user.mq_id === id ? { until: user.mq_until, total: R.moduleTime(lvl) } : null, busy: user.mq_id && user.mq_id !== id ? R.MODULES[user.mq_id]?.name : null });
+      block: capped && user.mq_id !== id ? { label: 'Limit', why: 'Ulepsz stocznię, by podnieść limit' } : null, now, secs: R.moduleTime(lvl, user), rushAction: '/statek/przyspiesz', tut: id === 'guns' ? 'module' : '',
+      building: user.mq_id === id ? { until: user.mq_until, total: R.moduleTime(lvl, user) } : null, busy: user.mq_id && user.mq_id !== id ? R.MODULES[user.mq_id]?.name : null });
   }).join('');
   return layout({ title: 'Statek', user, st, flash, active: 'statek', body: `
   <section class="card center ship-card" style="--shield:${Math.min(0.15 + user.s_shields * 0.07, 0.8).toFixed(2)}">

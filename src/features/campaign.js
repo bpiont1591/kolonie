@@ -36,8 +36,8 @@ export default function registerCampaign({ app, db, auth, page, action, preBattl
     const ch = prog[mi.c - 1], ms = ch.ms[mi.m - 1];
     if (!ch.unlocked) fail(ch.prevBoss ? `Rozdział ${ch.n} dostępny od poziomu ${ch.minLvl}.` : `Najpierw pokonaj bossa rozdziału ${ch.n - 1}.`);
     if (!ms.open) fail('Najpierw ukończ poprzednią misję.');
-    const cost = CA.energyCost(mi.c, mi.m);
-    const me = preBattle(u, now, cost);
+    const me = preBattle(u, now, CA.energyCost(mi.c, mi.m));
+    const cost = me.cost;
     const foe = CA.enemy(mi.c, mi.m);
     const sim = R.simulate(me, { ...foe, name: mi.boss ? ch.boss.name : `${foe.name}` });
     const stars = CA.starsFor(sim.aWon, sim.aHp, me.maxHp, mi.boss);

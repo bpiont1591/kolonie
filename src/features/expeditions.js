@@ -30,7 +30,7 @@ export default function registerExpeditions({ app, db, auth, page, action }) {
     const hp = R.currentHp(u, now);
     if (hp < ship.maxHp * R.EXPEDITION_MIN_HP) fail(`Statek musi mieć min. ${R.EXPEDITION_MIN_HP * 100}% HP (${hp}/${ship.maxHp}).`);
     if (u.energy < kind.energy) fail(`Za mało energii w magazynie (potrzeba ⚡${kind.energy}).`);
-    const until = now + kind.h * 3600_000;
+    const until = now + R.expeditionMs(kind, u);
     const happy = EVF.isOn(await EVF.activeEvents(t, now, !!u.is_test), 'happy') ? 100 : 0; // Happy hour: podwójne łupy dla wysłanych teraz
     const id = await t.insert("INSERT INTO expeditions (user_id, kind, started_at, return_at, status, result, bonus) VALUES (?, ?, ?, ?, 'active', '{}', ?)", [u.id, kind.id, now, until, happy]);
     await t.run('UPDATE users SET energy = energy - ?, ex_until = ?, hp = ?, hp_at = ? WHERE id = ?', [kind.energy, until, hp, now, u.id]);

@@ -92,6 +92,7 @@ export function shipStats(u) {
   return {
     maxHp: Math.round(b.maxHp * (1 + m.hp)), atk: Math.round(b.atk * (1 + m.atk)), def: Math.round(b.def * (1 + m.def)),
     crit: m.crit, dodge: m.dodge, shield: m.shield,
+    double: m.double, opener: m.opener, regen: m.regen, lastStand: m.lastStand, counter: m.counter,
   };
 }
 export function repairPerMin(u) {
@@ -142,22 +143,45 @@ export function simulate(a, d, rnd = Math.random) {
   A.sh = Math.round((A.shield || 0) * A.maxHp); D.sh = Math.round((D.shield || 0) * D.maxHp); // tarcza pochłania pierwsze obrażenia
   const log = [];
   const pick = (arr) => arr[Math.floor(rnd() * arr.length)];
-  const shoot = (s, t, round) => {
-    if (rnd() < 0.06 + (t.dodge || 0)) { log.push({ r: round, side: s === A ? 'a' : 'd', t: `${s.name} ${pick(MISS)}.` }); return; }
+  // Efekty kamieni milowych (tylko gdy są – bez nich liczba losowań jest jak dawniej):
+  // opener – pierwsza salwa mocniejsza, double – szansa na drugi strzał, counter – kontra po uniku,
+  // regen – naprawa co rundę, lastStand – raz na walkę przetrwanie śmiertelnego trafienia z 1 HP.
+  const side = (s) => (s === A ? 'a' : 'd');
+  const shoot = (s, t, round, extra = '') => {
+    if (rnd() < 0.06 + (t.dodge || 0)) {
+      log.push({ r: round, side: side(s), t: `${s.name} ${pick(MISS)}.` });
+      if (t.counter && t.hp > 0 && s.hp > 0 && rnd() < t.counter) shoot(t, s, round, ' (KONTRA)');
+      return;
+    }
     let dmg = s.atk * (0.85 + rnd() * 0.3) - t.def * 0.5;
     const crit = rnd() < 0.1 + (s.crit || 0);
     if (crit) dmg *= 1.6;
+    if (s.opener && !s.opened) { dmg *= 1 + s.opener; extra += ' (SALWA OTWIERAJĄCA)'; }
+    s.opened = true;
     dmg = Math.max(1, Math.round(dmg));
     const absorbed = Math.min(t.sh, dmg);
     t.sh -= absorbed;
     t.hp = Math.max(0, t.hp - (dmg - absorbed));
-    log.push({ r: round, side: s === A ? 'a' : 'd', t: `${s.name} ${pick(HIT)}: −${dmg} HP${crit ? ' (KRYTYK!)' : ''}${absorbed ? ` (tarcza pochłania ${absorbed})` : ''}. ${t.name}: ${t.hp}/${t.maxHp}` });
+    let saved = '';
+    if (t.hp <= 0 && t.lastStand && !t.stood) { t.stood = true; t.hp = 1; saved = ' – OSTATNI BASTION utrzymuje statek przy życiu!'; }
+    log.push({ r: round, side: side(s), t: `${s.name} ${pick(HIT)}${extra}: −${dmg} HP${crit ? ' (KRYTYK!)' : ''}${absorbed ? ` (tarcza pochłania ${absorbed})` : ''}. ${t.name}: ${t.hp}/${t.maxHp}${saved}` });
+  };
+  const turn = (s, t, round) => {
+    shoot(s, t, round);
+    if (s.double && t.hp > 0 && s.hp > 0 && rnd() < s.double) shoot(s, t, round, ' (PODWÓJNA SALWA)');
+  };
+  const regen = (s, round) => {
+    if (!s.regen || s.hp <= 0 || s.hp >= s.maxHp) return;
+    const h = Math.min(s.maxHp - s.hp, Math.max(1, Math.round(s.regen * s.maxHp)));
+    s.hp += h;
+    log.push({ r: round, side: side(s), t: `${s.name}: regeneracja bojowa +${h} HP.` });
   };
   let round = 0;
   while (round < 12 && A.hp > 0 && D.hp > 0) {
     round++;
-    shoot(A, D, round);
-    if (D.hp > 0) shoot(D, A, round);
+    turn(A, D, round);
+    if (D.hp > 0) turn(D, A, round);
+    regen(A, round); regen(D, round);
   }
   let aWon;
   if (D.hp <= 0) aWon = true;
@@ -172,8 +196,12 @@ export function simulate(a, d, rnd = Math.random) {
 
 // ---------- Etap 2: czasy budowy i ekspedycje ----------
 /** Czas ulepszenia z poziomu lvl na lvl+1 (sekundy). Krótki na niskich poziomach. */
-export const buildTime = (lvl) => Math.round(8 * lvl ** 2.2);
-export const moduleTime = (lvl) => Math.round(6 * lvl ** 2.1);
+export const buildTime = (lvl, u) => Math.round(8 * lvl ** 2.2 * (1 - (u ? mods(u).buildSpeed : 0)));
+export const moduleTime = (lvl, u) => Math.round(6 * lvl ** 2.1 * (1 - (u ? mods(u).buildSpeed : 0)));
+/** Czas ekspedycji (ms) – „Konwoje” skracają lot. */
+export const expeditionMs = (kind, u) => Math.round(kind.h * 3600_000 * (1 - (u ? mods(u).expSpeed : 0)));
+/** Koszt energii walki – „Mistrz floty” obniża go. */
+export const battleEnergy = (u, base) => Math.max(1, Math.ceil(base * (1 - (u ? mods(u).energySave : 0))));
 /** Koszt natychmiastowego ukończenia w kryształach. */
 export const rushCost = (msLeft) => Math.max(1, Math.ceil(msLeft / 1000 / 12));
 

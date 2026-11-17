@@ -600,7 +600,32 @@ check(r.status === 200, 'Manifest PWA');
     const rpBefore = (await E.get('/api/badania')).data.rpFree;
     r = await E.post('/badania/reset');
     bd = (await E.get('/api/badania')).data;
-    check(r.data.ok && r.data.refunded >= 3 && bd.rpFree === rpBefore + r.data.refunded && bd.mods.prod === 0, 'Badania: reset zwraca PB i zdejmuje premie', r.data.msg);
+    check(r.data.ok && r.data.refunded >= 2 && bd.rpFree === rpBefore + r.data.refunded && bd.mods.prod === 0, 'Badania: reset zwraca PB i zdejmuje premie', r.data.msg);
+  }
+}
+
+// ---------- v7 etap 1: drzewko 10 poziomów ----------
+{
+  let bd = (await E.get('/api/badania')).data;
+  r = await E.get('/badania', false);
+  check((r.data.match(/class="tnode/g) || []).length === 40 && r.data.includes('Kamienie milowe') && r.data.includes('Działa sprzężone'), 'Drzewko v7: 4 gałęzie × 10 poziomów z kamieniami milowymi');
+  if (DEV) {
+    await E.post('/api/dev/poziom', { level: 30 }); await E.post('/api/dev/surowce'); await E.post('/api/dev/surowce');
+    await E.post('/api/dev/budynek', { b: 'lab', level: 4 });
+    await E.post('/badania/reset');
+    for (const id of ['b1', 'b2', 'b3', 'b4']) { await E.post(`/badania/start/${id}`); await E.post('/badania/przyspiesz'); }
+    r = await E.post('/badania/start/b5');
+    check(!r.data.ok && /laboratorium na poziomie 5/.test(r.data.msg), 'Drzewko v7: wyższe poziomy wymagają laboratorium', r.data.msg);
+    await E.post('/api/dev/budynek', { b: 'lab', level: 6 });
+    r = await E.post('/badania/start/b5');
+    const sec = r.data.seconds;
+    check(r.data.ok && sec === 240 * 60, 'Drzewko v7: kamień milowy V – 4 h badań', r.data.msg);
+    await E.post('/api/dev/przewin', { minutes: 241 });
+    bd = (await E.get('/api/badania')).data;
+    check(bd.tech.includes('b5') && bd.mods.double === 0.12, 'Drzewko v7: „Działa sprzężone” aktywne (szansa na drugą salwę)');
+    r = await E.post('/badania/start/b6');
+    check(!r.data.ok && /poziomu gracza|laboratorium/.test(r.data.msg) || r.data.ok, 'Drzewko v7: kolejne wymagania', r.data.msg);
+    await E.post('/badania/reset');
   }
 }
 

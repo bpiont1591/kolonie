@@ -125,12 +125,12 @@ export default function registerEvents({ app, db, auth, page, action, preBattle,
     if (sim.aWon) reward = doubled(R.pirateReward(tier, u.level, R.labBonus(u) * R.lootMult(u, 'pveLoot')), lootMult(evs));
     reward.xp = xpGain(u, reward.xp);
     await t.run('UPDATE users SET energy = energy - ?, hp = ?, hp_at = ?, last_battle_at = ?, pve_wins = pve_wins + ? WHERE id = ?',
-      [tier.energy, Math.max(1, sim.aHp), now, now, sim.aWon ? 1 : 0, u.id]);
-    const got = await G.grant(t, { ...u, energy: u.energy - tier.energy }, now, reward);
+      [me.cost, Math.max(1, sim.aHp), now, now, sim.aWon ? 1 : 0, u.id]);
+    const got = await G.grant(t, { ...u, energy: u.energy - me.cost }, now, reward);
     const pts = sim.aWon ? await contribute(t, u, now, EV.POINTS.xeno) : 0;
     const battleId = await t.insert(`INSERT INTO battles (created_at, kind, attacker_id, defender_id, enemy_name, attacker_won, log, reward)
       VALUES (?, 'pve', ?, NULL, ?, ?, ?, ?)`, [now, u.id, tier.name, sim.aWon ? 1 : 0, JSON.stringify(sim.log), JSON.stringify({ ...got, tier: 'xeno', evPts: pts })]);
-    await G.track(t, u.id, now, { pve: 1, win: sim.aWon ? 1 : 0, energy: tier.energy });
+    await G.track(t, u.id, now, { pve: 1, win: sim.aWon ? 1 : 0, energy: me.cost });
     return { msg: sim.aWon ? `Najeźdźca zniszczony! +${pts} pkt inwazji · ${G.rewardText(got)}` : 'Najeźdźca okazał się silniejszy – napraw statek i wracaj do walki.',
       redirect: `/bitwa/${battleId}`, data: { battleId, won: sim.aWon, points: pts, reward: got } };
   }));
